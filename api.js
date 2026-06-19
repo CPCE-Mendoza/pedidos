@@ -1,52 +1,129 @@
 // ─────────────────────────────────────────────────────────────
-//  api.js — Cliente HTTP hacia el backend de Apps Script
-//  Todas las llamadas al servidor pasan por este módulo.
+//  api.js — Cliente JSONP hacia el backend de Apps Script
+//
+//  POR QUÉ JSONP:
+//  Los dominios Google Workspace (/a/macros/dominio.org/...)
+//  bloquean CORS en doPost() porque exigen autenticación OAuth.
+//  JSONP carga el endpoint como <script> — no está sujeto a
+//  CORS policy — y Apps Script responde con callback({...}).
+//
+//  SEGURIDAD: Todo viaja por HTTPS (cifrado en tránsito).
+//  El token de sesión se valida en cada llamada server-side.
 // ─────────────────────────────────────────────────────────────
 
 const API = (() => {
 
+  let _callbackCounter = 0;
+
   /**
-   * Llamada base. Apps Script con "Ejecutar como: Yo"
-   * requiere no-cors para solicitudes cross-origin,
-   * pero podemos usar CORS normal porque nuestro doPost
-   * devuelve ContentService sin restricciones de origen.
+   * Ejecuta una llamada JSONP al backend de Apps Script.
+   * Inyecta un <script> con la URL + callback único,
+   * espera la respuesta y limpia el DOM.
    *
-   * IMPORTANTE: Apps Script ignora headers de CORS en doPost
-   * con deployments públicos — fetch con mode:'cors' funciona.
+   * @param {string} action  - Nombre del handler en doGet()
+   * @param {Object} params  - Parámetros adicionales (ya como strings)
+   * @param {number} timeout - Milisegundos antes de abortar (default 15s)
    */
-  async function call(action, payload = {}) {
-    const token = Session.getToken();
-    const body  = JSON.stringify({ action, token, ...payload });
+  function jsonp(action, params = {}, timeout = 15000) {
+    return new Promise((resolve, reject) => {
+      const cbName = '__apscb_' + (++_callbackCounter) + '_' + Date.now();
+      const token  = Session.getToken();
 
-    const res = await fetch(CONFIG.API_URL, {
-      method:  'POST',
-      // Apps Script no acepta preflight (OPTIONS), así que
-      // enviamos como text/plain para evitar preflight CORS.
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body,
+      // Construir query string
+      const qs = new URLSearchParams({
+        action,
+        callback: cbName,
+        ...(token ? { token } : {}),
+        ...params,
+      }).toString();
+
+      const url    = CONFIG.API_URL + '?' + qs;
+      const script = document.createElement('script');
+
+      // Timer de timeout
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error('Tiempo de espera agotado. Verificá tu conexión.'));
+      }, timeout);
+
+      // La función global que Apps Script llamará
+      window[cbName] = (data) => {
+        cleanup();
+        // Si el backend reporta sesión inválida → logout
+        if (!data.success && data.message &&
+            (data.message.includes('sesión') || data.message.includes('Sesión'))) {
+          Session.clear();
+          App.showView('login');
+        }
+        resolve(data);
+      };
+
+      function cleanup() {
+        clearTimeout(timer);
+        delete window[cbName];
+        if (script.parentNode) script.parentNode.removeChild(script);
+      }
+
+      script.onerror = () => {
+        cleanup();
+        reject(new Error('No se pudo conectar con el servidor. Verificá la URL en config.js'));
+      };
+
+      script.src = url;
+      document.head.appendChild(script);
     });
-
-    if (!res.ok) throw new Error(`Error HTTP ${res.status}`);
-
-    const data = await res.json();
-
-    // Si el backend reporta sesión inválida, limpiar y redirigir
-    if (!data.success && data.message && data.message.includes('sesión')) {
-      Session.clear();
-      App.showView('login');
-      throw new Error(data.message);
-    }
-
-    return data;
   }
 
+  /**
+   * Serializa valores que no son strings simples.
+   * Arrays y objetos se JSON.stringify + encodeURIComponent.
+   */
+  function enc(val) {
+    if (typeof val === 'string') return encodeURIComponent(val);
+    return encodeURIComponent(JSON.stringify(val));
+  }
+
+  // ── API pública ──────────────────────────────────────────
+
   return {
-    login:            (email, password)          => call('login',            { email, password }),
-    getFormConfig:    ()                         => call('getFormConfig'),
-    submitRequest:    (area, recurso, justif)    => call('submitRequest',    { area, recurso, justificacion: justif }),
-    getMyRequests:    ()                         => call('getMyRequests'),
-    getAllRequests:    ()                         => call('getAllRequests'),
-    updateStatus:     (area, id, estado, notas)  => call('updateStatus',     { area, id, nuevoEstado: estado, notas }),
-    updateFormConfig: (area, opciones)           => call('updateFormConfig', { area, opciones }),
+    login(email, password) {
+      return jsonp('login', { email, password });
+    },
+
+    getFormConfig() {
+      return jsonp('getFormConfig');
+    },
+
+    submitRequest(area, recurso, justificacion) {
+      return jsonp('submitRequest', {
+        area,
+        recurso:       enc(recurso),
+        justificacion: enc(justificacion),
+      });
+    },
+
+    getMyRequests() {
+      return jsonp('getMyRequests');
+    },
+
+    getAllRequests() {
+      return jsonp('getAllRequests');
+    },
+
+    updateStatus(area, id, nuevoEstado, notas) {
+      return jsonp('updateStatus', {
+        area, id, nuevoEstado,
+        notas: enc(notas || ''),
+      });
+    },
+
+    updateFormConfig(area, opciones) {
+      // opciones es un array → se serializa como JSON
+      return jsonp('updateFormConfig', {
+        area,
+        opciones: enc(opciones),
+      });
+    },
   };
+
 })();

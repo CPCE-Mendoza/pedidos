@@ -6,7 +6,7 @@
 const CONFIG = {
   // URL generada al publicar la Web App en Apps Script.
   // Termina en /exec (no en /dev)
-  API_URL: 'https://script.google.com/a/macros/cpcemza.org.ar/s/AKfycbzJDiUZLq7AFkmC7dqYm4bj8JWkk1mFcryEwgi9Ge6r6qIKJb0eSU1zjXXRIJXuoP23/exec',
+  API_URL: 'https://script.google.com/macros/s/AKfycbxTuNCQrcrxwbfEn2X0Pcx_LlAUOMMumjt0PHaCAU0ufGC8ZGsZq5t0ahxd3XvNKk0s/exec',
 
   // Nombre que aparece en el header de la app
   ORG_NAME: 'Mi Organización',
