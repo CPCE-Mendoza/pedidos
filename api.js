@@ -124,6 +124,12 @@ const API = (() => {
         opciones: enc(opciones),
       });
     },
+    submitMultiRequest(payload) {
+      // payload será un objeto: { evento: "...", justificacion: "...", requerimientos: {...} }
+      return jsonp('submitMultiRequest', { 
+        data: enc(payload) 
+      });
+    },
   };
 
 })();

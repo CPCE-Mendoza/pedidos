@@ -174,59 +174,85 @@ async function handleLogin(e) {
 }
 
 
+// Función helper para el HTML
+window.toggleArea = function(areaId) {
+  const isChecked = document.getElementById(`chk-${areaId}`).checked;
+  document.getElementById(`div-${areaId}`).classList.toggle('hidden', !isChecked);
+};
+
 // ── Formulario de Solicitud ────────────────────────────────
 let formConfigCache = null;
 
 async function loadForm() {
   try {
     const res = await API.getFormConfig();
-    if (res.success) formConfigCache = res.data;
+    if (res.success) {
+      formConfigCache = res.data;
+      // Cargar opciones en todos los selects
+      ['Compras', 'Mantenimiento', 'IT'].forEach(area => {
+        const sel = document.getElementById(`sel-${area.toLowerCase()}`);
+        if(sel) {
+          sel.innerHTML = '<option value="">-- Opciones precargadas (Opcional) --</option>';
+          (formConfigCache[area] || []).forEach(op => {
+            const opt = document.createElement('option');
+            opt.value = op; opt.textContent = op;
+            sel.appendChild(opt);
+          });
+        }
+      });
+    }
   } catch (err) {
-    UI.toast('No se pudo cargar la configuración del formulario.', 'error');
+    UI.toast('No se pudo cargar la configuración.', 'error');
   }
-}
-
-function updateRecursoSelect() {
-  const area = document.getElementById('area').value;
-  const sel  = document.getElementById('recurso');
-  sel.innerHTML = '<option value="" disabled selected>-- Selecciona una opción --</option>';
-
-  const opciones = formConfigCache?.[area] || [];
-  if (opciones.length === 0) {
-    sel.innerHTML += '<option disabled>Sin opciones configuradas</option>';
-    sel.disabled = true;
-  } else {
-    opciones.forEach(op => {
-      const opt = document.createElement('option');
-      opt.value = op; opt.textContent = op;
-      sel.appendChild(opt);
-    });
-    sel.disabled = false;
-  }
-  sel.classList.toggle('bg-slate-50', sel.disabled);
 }
 
 async function handleSubmitRequest(e) {
   e.preventDefault();
-  UI.loading('btn-submit', true, 'Enviar Solicitud');
+  
+  const evento = document.getElementById('evento-nombre').value.trim();
+  const justif = document.getElementById('justificacion').value.trim();
+  
+  if (!evento || !justif) return UI.toast('Completa el nombre y la justificación general.', 'error');
 
-  const area    = document.getElementById('area').value;
-  const recurso = document.getElementById('recurso').value;
-  const justif  = document.getElementById('justificacion').value.trim();
+  const requerimientos = {};
+  let areasChecked = 0;
 
+  ['Compras', 'Mantenimiento', 'IT'].forEach(area => {
+    const idBase = area.toLowerCase();
+    if (document.getElementById(`chk-${idBase}`).checked) {
+      areasChecked++;
+      const selectVal = document.getElementById(`sel-${idBase}`).value;
+      const textVal = document.getElementById(`det-${idBase}`).value.trim();
+      
+      let detalleFinal = [];
+      if (selectVal) detalleFinal.push(`[${selectVal}]`);
+      if (textVal) detalleFinal.push(textVal);
+      
+      requerimientos[area] = detalleFinal.join(' - ');
+    }
+  });
+
+  if (areasChecked === 0) return UI.toast('Debes seleccionar al menos un área (Compras, Mantenimiento o IT).', 'error');
+
+  UI.loading('btn-submit', true, 'Enviando Solicitud...');
+  
   try {
-    const res = await API.submitRequest(area, recurso, justif);
+    const payload = { evento, justificacion: justif, requerimientos };
+    const res = await API.submitMultiRequest(payload);
+    
     if (!res.success) throw new Error(res.message);
+    
     UI.toast(res.message);
     e.target.reset();
-    document.getElementById('recurso').disabled = true;
+    ['compras','mantenimiento','it'].forEach(a => {
+      document.getElementById(`div-${a}`).classList.add('hidden');
+    });
   } catch (err) {
     UI.toast(err.message, 'error');
   } finally {
-    UI.loading('btn-submit', false, 'Enviar Solicitud');
+    UI.loading('btn-submit', false, 'Enviar Solicitud Múltiple');
   }
 }
-
 
 // ── Mis Solicitudes (usuario) ──────────────────────────────
 async function loadMyRequests() {
@@ -246,18 +272,42 @@ function renderMyRequests(items) {
     return;
   }
 
-  const html = items.map(r => `
-    <div class="border border-slate-200 rounded-xl p-4 hover:border-indigo-300 transition-colors">
-      <div class="flex items-start justify-between gap-2 mb-2">
-        <div>
-          <p class="text-xs font-mono text-slate-400">${r.id}</p>
-          <p class="font-semibold text-slate-800">${r.recurso}</p>
-          <p class="text-xs text-slate-500">${r.area} · ${UI.formatDate(r.fecha)}</p>
-        </div>
-        ${UI.statusBadge(r.estado)}
+  // AGRUPAMOS por ID para que un evento con 3 áreas se vea en una sola Card
+  const grouped = {};
+  items.forEach(r => {
+    if (!grouped[r.id]) {
+      // Extraemos el nombre del evento de la justificación
+      const partesJustif = r.justificacion.split('\nDetalles: ');
+      const eventoNombre = partesJustif[0].replace('Evento: ', '') || r.id;
+      const justifTexto = partesJustif[1] || r.justificacion;
+
+      grouped[r.id] = { id: r.id, fecha: r.fecha, evento: eventoNombre, justificacion: justifTexto, tareas: [] };
+    }
+    grouped[r.id].tareas.push(r);
+  });
+
+  // Renderizamos las tarjetas agrupadas
+  const html = Object.values(grouped).map(g => `
+    <div class="border border-slate-200 rounded-2xl p-5 bg-white shadow-sm hover:shadow-md transition-shadow">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-base font-bold text-slate-800">${g.evento}</h3>
+        <span class="text-xs font-mono text-indigo-500 bg-indigo-50 px-2 py-1 rounded-md">${g.id}</span>
       </div>
-      <p class="text-sm text-slate-600 line-clamp-2">${r.justificacion}</p>
-      ${r.notas ? `<p class="text-xs text-indigo-700 mt-2 bg-indigo-50 rounded px-2 py-1">📝 ${r.notas}</p>` : ''}
+      <p class="text-sm text-slate-500 mb-4 line-clamp-2">${g.justificacion}</p>
+      
+      <div class="space-y-2 border-t border-slate-100 pt-3">
+        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Estado por Área</p>
+        ${g.tareas.map(t => `
+          <div class="bg-slate-50 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border border-slate-100">
+            <div>
+              <span class="text-xs font-bold text-slate-700 block">${t.area}</span>
+              <span class="text-xs text-slate-600 block mt-0.5">${t.recurso}</span>
+              ${t.notas ? `<p class="text-[11px] text-amber-700 mt-1.5 bg-amber-50 rounded flex inline-flex items-center px-1.5 py-0.5">💬 Admin: ${t.notas}</p>` : ''}
+            </div>
+            <div class="self-start sm:self-auto shrink-0">${UI.statusBadge(t.estado)}</div>
+          </div>
+        `).join('')}
+      </div>
     </div>
   `).join('');
 
