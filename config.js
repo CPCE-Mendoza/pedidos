@@ -6,7 +6,7 @@
 const CONFIG = {
   // URL generada al publicar la Web App en Apps Script.
   // Termina en /exec (no en /dev)
-  API_URL: 'https://script.google.com/macros/s/AKfycbzg-RE267Ag-8aVU-hhzTXK4L4kxlM4Cw-Jum_fqvcpkkHf65rPnul0u7ngyQvrNz57/exec',
+  API_URL: 'https://script.google.com/macros/s/AKfycbylqd5aBY9vpgDp0eyFyc7E_I5gDknpBfSrI0dbLtxjrNF8L5RPjIH2_gRv6usXxI-2/exec',
 
   // Nombre que aparece en el header de la app
   ORG_NAME: 'Mi Organización',
