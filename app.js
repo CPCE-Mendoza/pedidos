@@ -54,9 +54,15 @@ const UI = {
     t.style.display = 'block';
     setTimeout(() => { t.style.display = 'none'; }, 3500);
   },
-  loading(id, isLoading, text = 'Procesando...') {
+loading(id, isLoading, text = 'Procesando...') {
     const btn = document.getElementById(id);
     if (!btn) return;
+    
+    // Guardamos el texto original solo la primera vez
+    if (isLoading && !btn.dataset.original) {
+      btn.dataset.original = btn.textContent; 
+    }
+    
     btn.disabled = isLoading;
     btn.textContent = isLoading ? text : (btn.dataset.original || btn.textContent);
   },

@@ -94,11 +94,10 @@ const API = (() => {
       return jsonp('getFormConfig');
     },
 
-    submitRequest(area, recurso, justificacion) {
-      return jsonp('submitRequest', {
-        area,
-        recurso:       enc(recurso),
-        justificacion: enc(justificacion),
+    // 👇 ESTA ES LA FUNCIÓN NUEVA QUE FALTABA 👇
+    submitMultiRequest(data) {
+      return jsonp('submitMultiRequest', {
+        data: enc(data),
       });
     },
 
@@ -118,7 +117,6 @@ const API = (() => {
     },
 
     updateFormConfig(area, opciones) {
-      // opciones es un array → se serializa como JSON
       return jsonp('updateFormConfig', {
         area,
         opciones: enc(opciones),
