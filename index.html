@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,20 +10,12 @@
   <link rel="stylesheet" href="styles.css">
   <style>
     /* Critical inline styles para primera carga */
-    .shell {
-      max-width: 640px;
-      width: 100%;
-    }
-
-    .screen.hidden {
-      display: none !important;
-    }
+    .shell { max-width: 640px; width: 100%; }
+    .hidden { display: none !important; }
   </style>
 </head>
-
 <body>
   <div class="shell">
-    <!-- ── Header ── -->
     <div class="app-header">
       <span class="header-logo">📋</span>
       <div class="header-divider"></div>
@@ -33,16 +24,13 @@
         <span class="header-title__main">Portal Solicitudes</span>
       </div>
       <div style="flex: 1;"></div>
-      <button id="btn-user-menu" class="btn btn--secondary"
-        style="display:none; position: absolute; right: 20px; top: 20px; font-size: 12px; padding: 8px 12px;">
+      <button id="btn-user-menu" class="btn btn--secondary" style="display:none; position: absolute; right: 20px; top: 20px; font-size: 12px; padding: 8px 12px;">
         <span id="user-email-short"></span> ▼
       </button>
     </div>
 
-    <!-- ── Main Card ── -->
     <div class="card">
 
-      <!-- Vista: Login -->
       <div id="view-login" class="screen">
         <div class="screen__header">
           <h1 class="screen__title">Inicia Sesión</h1>
@@ -52,14 +40,14 @@
         <form id="form-login" class="form">
           <div class="field">
             <label class="field__label" for="login-email">Correo electrónico</label>
-            <input id="login-email" type="email" name="email" required placeholder="tu@empresa.com"
-              class="field__input">
+            <input id="login-email" type="email" name="email" required 
+              placeholder="tu@empresa.com" class="field__input">
           </div>
 
           <div class="field">
             <label class="field__label" for="login-password">Contraseña</label>
-            <input id="login-password" type="password" name="password" required placeholder="••••••••"
-              class="field__input">
+            <input id="login-password" type="password" name="password" required 
+              placeholder="••••••••" class="field__input">
           </div>
 
           <div id="login-error" class="alert alert--error" style="display:none;"></div>
@@ -74,7 +62,6 @@
         </div>
       </div>
 
-      <!-- Vista: Nueva Solicitud (Multi-área) -->
       <div id="view-form" class="screen hidden">
         <div class="screen__header">
           <h1 class="screen__title">Nueva Solicitud</h1>
@@ -82,31 +69,27 @@
         </div>
 
         <form id="form-request" class="form">
-          <!-- Sección: Detalles del evento -->
           <div class="form__section">
             <div class="field">
               <label class="field__label" for="evento">Nombre del evento <span class="field__required">*</span></label>
-              <input id="evento" type="text" name="evento" required placeholder="Ej: Capacitación de Contabilidad 2024"
+              <input id="evento" type="text" name="evento" required 
+                placeholder="Ej: Capacitación de Contabilidad 2024"
                 class="field__input">
             </div>
 
             <div class="field">
-              <label class="field__label" for="justificacion">Detalles y contexto <span
-                  class="field__required">*</span></label>
-              <textarea id="justificacion" name="justificacion" required
+              <label class="field__label" for="justificacion">Detalles y contexto <span class="field__required">*</span></label>
+              <textarea id="justificacion" name="justificacion" required 
                 placeholder="Fechas, cantidad de asistentes, descripción general del evento..."
                 class="field__textarea"></textarea>
             </div>
           </div>
 
-          <!-- Sección: Requerimientos por Área -->
           <div class="form__section">
             <label class="field__label">Recursos solicitados <span class="field__required">*</span></label>
-
-            <!-- Área: Compras -->
+            
             <div class="field">
-              <label class="field__label"
-                style="text-transform: none; font-weight: 600; font-size: 14px; margin-top: 8px;">
+              <label class="field__label" style="text-transform: none; font-weight: 600; font-size: 14px; margin-top: 8px;">
                 🛒 Compras
               </label>
               <div id="area-Compras" class="checkbox-group">
@@ -114,10 +97,8 @@
               </div>
             </div>
 
-            <!-- Área: Mantenimiento -->
             <div class="field">
-              <label class="field__label"
-                style="text-transform: none; font-weight: 600; font-size: 14px; margin-top: 8px;">
+              <label class="field__label" style="text-transform: none; font-weight: 600; font-size: 14px; margin-top: 8px;">
                 🏢 Mantenimiento
               </label>
               <div id="area-Mantenimiento" class="checkbox-group">
@@ -125,10 +106,8 @@
               </div>
             </div>
 
-            <!-- Área: Tecnica -->
             <div class="field">
-              <label class="field__label"
-                style="text-transform: none; font-weight: 600; font-size: 14px; margin-top: 8px;">
+              <label class="field__label" style="text-transform: none; font-weight: 600; font-size: 14px; margin-top: 8px;">
                 💻 Tecnica
               </label>
               <div id="area-Tecnica" class="checkbox-group">
@@ -145,7 +124,6 @@
         </form>
       </div>
 
-      <!-- Vista: Mis Solicitudes -->
       <div id="view-my-requests" class="screen hidden">
         <div class="screen__header">
           <h1 class="screen__title">Mis Solicitudes</h1>
@@ -157,17 +135,14 @@
         </div>
       </div>
 
-      <!-- Vista: Panel Admin -->
       <div id="view-admin" class="screen hidden">
         <div class="screen__header">
           <h1 class="screen__title">Panel de Administración</h1>
           <p id="admin-area-name" class="screen__desc">Área: —</p>
         </div>
 
-        <!-- Tabs -->
-        <div
-          style="display: flex; gap: 2px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 12px;">
-          <button id="tab-btn-solicitudes" type="button"
+        <div style="display: flex; gap: 2px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 12px;">
+          <button id="tab-btn-solicitudes" type="button" 
             style="background: none; border: none; padding: 8px 12px; color: var(--blue-main); border-bottom: 2px solid var(--blue-main); font-weight: 600; cursor: pointer;"
             onclick="switchAdminTab('tab-solicitudes')">
             Solicitudes
@@ -179,7 +154,6 @@
           </button>
         </div>
 
-        <!-- Tab: Solicitudes -->
         <div id="tab-solicitudes">
           <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
             <input id="admin-search" type="text" placeholder="Buscar solicitante, ID o recurso..."
@@ -199,27 +173,24 @@
           </div>
         </div>
 
-        <!-- Tab: Config -->
         <div id="tab-config" class="hidden">
           <p style="color: var(--text-muted); font-size: 14px; margin-bottom: 12px;">
             Editá las opciones disponibles en el campo de recursos (una por línea).
           </p>
           <textarea id="config-opciones" placeholder="Opción 1&#10;Opción 2&#10;Opción 3..."
             style="width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-md); font-family: monospace; font-size: 14px; min-height: 150px; margin-bottom: 12px; resize: vertical;"></textarea>
-          <button id="btn-save-config" type="button" class="btn btn--primary" onclick="saveAdminConfig()">
+          <button id="btn-save-config" type="button" class="btn btn--primary"
+            onclick="saveAdminConfig()">
             Guardar Opciones
           </button>
         </div>
       </div>
 
-      <!-- Nav Footer (para usuarios autenticados) -->
-      <div id="app-nav"
-        style="display: none; border-top: 1px solid var(--border); padding: 16px 36px; display: flex; gap: 8px; justify-content: space-between;">
+      <div id="app-nav" style="display: none; border-top: 1px solid var(--border); padding: 16px 36px; gap: 8px; justify-content: space-between;">
         <button id="nav-form" type="button" class="btn btn--secondary" onclick="App.showView('form')" style="flex: 1;">
           📝 Nueva
         </button>
-        <button id="nav-requests" type="button" class="btn btn--secondary" onclick="App.showView('my-requests')"
-          style="flex: 1;">
+        <button id="nav-requests" type="button" class="btn btn--secondary" onclick="App.showView('my-requests')" style="flex: 1;">
           📋 Mis solicitudes
         </button>
         <button id="nav-admin" type="button" class="btn btn--secondary" style="flex: 1; display: none;"
@@ -233,19 +204,15 @@
 
     </div>
 
-    <!-- Footer -->
     <div class="app-footer" style="margin-top: 16px;">
       © 2024 CPCE Mendoza · Sistema Interno
     </div>
   </div>
 
-  <!-- Toast notifications -->
   <div id="toast" class="toast" style="display: none;"></div>
 
-  <!-- Scripts: Config primero, luego API y App -->
   <script src="config.js"></script>
   <script src="api.js"></script>
   <script src="app.js" defer></script>
 </body>
-
 </html>
