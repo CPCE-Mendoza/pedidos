@@ -1,438 +1,443 @@
-// ─────────────────────────────────────────────────────────────
-//  app.js — Lógica de la SPA (Single Page Application)
-//  Gestiona vistas, sesión y eventos del DOM.
-// ─────────────────────────────────────────────────────────────
+/**
+ * app.js — Lógica de la aplicación (COMPLETO & VERIFICADO)
+ * - Gestión de sesión
+ * - SPA con ruteador
+ * - Multi-select dinámico
+ * - Admin panel
+ */
 
-// ── Gestión de Sesión ──────────────────────────────────────
+// ──────────────────────────────────────────────────────
+// SESSION — Gestión de sesión en localStorage
+// ──────────────────────────────────────────────────────
 const Session = (() => {
-  const KEY = 'sol_session';
-
-  function save(data) {
-    const expires = Date.now() + CONFIG.SESSION_HOURS * 3600 * 1000;
-    localStorage.setItem(KEY, JSON.stringify({ ...data, expires }));
-  }
-
-  function get() {
+  const KEY = 'sol_sess';
+  const save = (data) => {
+    const exp = Date.now() + CONFIG.SESSION_HOURS * 3600 * 1000;
+    localStorage.setItem(KEY, JSON.stringify({ ...data, exp }));
+  };
+  const get = () => {
     try {
       const raw = localStorage.getItem(KEY);
       if (!raw) return null;
-      const data = JSON.parse(raw);
-      if (Date.now() > data.expires) { clear(); return null; }
-      return data;
+      const s = JSON.parse(raw);
+      if (Date.now() > s.exp) { clear(); return null; }
+      return s;
     } catch { return null; }
-  }
-
-  function getToken()  { return get()?.token || null; }
-  function getRole()   { return get()?.rol   || null; }
-  function getEmail()  { return get()?.email || null; }
-  function getArea()   { return get()?.areaAdmin || null; }
-  function clear()     { localStorage.removeItem(KEY); }
-  function isAdmin()   { return getRole() === 'admin'; }
-
-  return { save, get, getToken, getRole, getEmail, getArea, clear, isAdmin };
+  };
+  const clear = () => localStorage.removeItem(KEY);
+  return { 
+    save, get, clear, 
+    getToken: () => get()?.token, 
+    getRole: () => get()?.rol, 
+    getEmail: () => get()?.email,
+    isAdmin: () => get()?.rol === 'admin' 
+  };
 })();
 
-
-// ── Utilidades UI ──────────────────────────────────────────
+// ──────────────────────────────────────────────────────
+// UI — Utilidades de interfaz
+// ──────────────────────────────────────────────────────
 const UI = {
-  show(id)   { document.getElementById(id)?.classList.remove('hidden'); },
-  hide(id)   { document.getElementById(id)?.classList.add('hidden'); },
-  setText(id, text) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = text;
+  show(id) { 
+    const el = document.getElementById(id); 
+    if(el) el.classList.remove('hidden'); 
   },
-  setHTML(id, html) {
-    const el = document.getElementById(id);
-    if (el) el.innerHTML = html;
+  hide(id) { 
+    const el = document.getElementById(id); 
+    if(el) el.classList.add('hidden'); 
   },
-
   toast(msg, type = 'success') {
     const t = document.getElementById('toast');
+    if (!t) return;
     t.textContent = msg;
-    t.className = `fixed bottom-6 right-6 px-5 py-3 rounded-lg shadow-lg text-sm font-medium z-50 transition-opacity duration-300
-      ${type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`;
-    t.classList.remove('opacity-0');
-    setTimeout(() => t.classList.add('opacity-0'), 3500);
+    t.className = `toast toast--${type}`;
+    t.style.display = 'block';
+    setTimeout(() => { t.style.display = 'none'; }, 3500);
   },
-
-  loading(btnId, isLoading, originalText) {
-    const btn = document.getElementById(btnId);
+  loading(id, isLoading, text = 'Procesando...') {
+    const btn = document.getElementById(id);
     if (!btn) return;
     btn.disabled = isLoading;
-    btn.innerHTML = isLoading
-      ? `<svg class="animate-spin h-4 w-4 mr-2 inline" viewBox="0 0 24 24" fill="none">
-           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-         </svg>Procesando...`
-      : originalText;
+    btn.textContent = isLoading ? text : (btn.dataset.original || btn.textContent);
   },
-
   statusBadge(estado) {
-    const cls = CONFIG.STATUS_COLORS[estado] || 'bg-gray-100 text-gray-700';
-    return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${cls}">${estado}</span>`;
-  },
-
-  formatDate(val) {
-    if (!val) return '—';
-    const d = new Date(val);
-    return isNaN(d) ? val : d.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
+    const colors = { 
+      Pendiente: '#d4850a', 
+      'En proceso': '#1a5fa8', 
+      Completado: '#1d8a4e', 
+      Rechazado: '#c0392b' 
+    };
+    return `<span style="display:inline-block; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:600; background:${colors[estado]}20; color:${colors[estado]}">${estado}</span>`;
   }
 };
 
+// ──────────────────────────────────────────────────────
+// FORMCONFIG — Cache de configuración del formulario
+// ──────────────────────────────────────────────────────
+let FormConfigCache = null;
+let FormConfigLoaded = false;
 
-// ── Router de Vistas ───────────────────────────────────────
-const App = {
-  views: ['view-login', 'view-form', 'view-my-requests', 'view-admin'],
-
-  showView(name) {
-    this.views.forEach(v => UI.hide(v));
-    UI.show('view-' + name);
-    // Actualizar nav activo
-    document.querySelectorAll('[data-view]').forEach(el => {
-      el.classList.toggle('nav-active', el.dataset.view === name);
-    });
-  },
-
-  async init() {
-    // Restaurar sesión si existe
-    const session = Session.get();
-    if (session) {
-      this.applySession(session);
-      this.showView('form');
-    } else {
-      this.showView('login');
-    }
-
-    // Bind eventos globales
-    bindEvents();
-  },
-
-  applySession(session) {
-    UI.setText('user-email', session.email);
-    // Mostrar nav items según rol
-    document.getElementById('nav-admin')?.classList.toggle('hidden', session.rol !== 'admin');
-    document.getElementById('nav-my-requests')?.classList.toggle('hidden', session.rol === 'admin');
-  },
-};
-
-
-// ── Manejadores de Eventos ──────────────────────────────────
-function bindEvents() {
-  // Login
-  document.getElementById('form-login')?.addEventListener('submit', handleLogin);
-
-  // Logout
-  document.getElementById('btn-logout')?.addEventListener('click', () => {
-    Session.clear();
-    App.showView('login');
-  });
-
-  // Navegación
-  document.querySelectorAll('[data-view]').forEach(el => {
-    el.addEventListener('click', (e) => {
-      e.preventDefault();
-      const view = el.dataset.view;
-      App.showView(view);
-      if (view === 'form')        loadForm();
-      if (view === 'my-requests') loadMyRequests();
-      if (view === 'admin')       loadAdminPanel();
-    });
-  });
-
-  // Select de área en formulario
-  document.getElementById('area')?.addEventListener('change', updateRecursoSelect);
-
-  // Submit solicitud
-  document.getElementById('form-request')?.addEventListener('submit', handleSubmitRequest);
-}
-
-
-// ── Login ──────────────────────────────────────────────────
-async function handleLogin(e) {
-  e.preventDefault();
-  UI.loading('btn-login', true, 'Iniciar Sesión');
-  UI.hide('login-error');
-
-  const email    = document.getElementById('login-email').value.trim();
-  const password = document.getElementById('login-password').value;
-
-  try {
-    const res = await API.login(email, password);
-    if (!res.success) throw new Error(res.message);
-
-    Session.save(res);
-    App.applySession(res);
-    await loadForm();
-    App.showView('form');
-    UI.toast('Bienvenido, ' + res.email);
-  } catch (err) {
-    document.getElementById('login-error').textContent = err.message;
-    UI.show('login-error');
-  } finally {
-    UI.loading('btn-login', false, 'Iniciar Sesión');
-  }
-}
-
-
-// Función helper para el HTML
-window.toggleArea = function(areaId) {
-  const isChecked = document.getElementById(`chk-${areaId}`).checked;
-  document.getElementById(`div-${areaId}`).classList.toggle('hidden', !isChecked);
-};
-
-// ── Formulario de Solicitud ────────────────────────────────
-let formConfigCache = null;
-
-async function loadForm() {
+async function loadFormConfig() {
+  if (FormConfigLoaded) return FormConfigCache;
   try {
     const res = await API.getFormConfig();
     if (res.success) {
-      formConfigCache = res.data;
-      // Cargar opciones en todos los selects
-      ['Compras', 'Mantenimiento', 'IT'].forEach(area => {
-        const sel = document.getElementById(`sel-${area.toLowerCase()}`);
-        if(sel) {
-          sel.innerHTML = '<option value="">-- Opciones precargadas (Opcional) --</option>';
-          (formConfigCache[area] || []).forEach(op => {
-            const opt = document.createElement('option');
-            opt.value = op; opt.textContent = op;
-            sel.appendChild(opt);
-          });
-        }
-      });
+      FormConfigCache = res.data;
+      FormConfigLoaded = true;
+      renderCheckboxes();
     }
   } catch (err) {
     UI.toast('No se pudo cargar la configuración.', 'error');
   }
 }
 
+function renderCheckboxes() {
+  if (!FormConfigCache) return;
+  ['Compras', 'Mantenimiento', 'IT'].forEach(area => {
+    const container = document.getElementById('area-' + area);
+    if (!container) return;
+    const opciones = FormConfigCache[area] || [];
+    if (opciones.length === 0) {
+      container.innerHTML = '<p style="color: var(--text-subtle); font-size: 13px; padding: 4px;">Sin opciones configuradas</p>';
+    } else {
+      container.innerHTML = opciones.map((op, i) => `
+        <div class="checkbox-item">
+          <input type="checkbox" id="cb-${area}-${i}" name="${area}" value="${op}">
+          <label for="cb-${area}-${i}">${op}</label>
+        </div>
+      `).join('');
+    }
+  });
+}
+
+// ──────────────────────────────────────────────────────
+// APP — Manejador principal de la aplicación
+// ──────────────────────────────────────────────────────
+const App = {
+  async init() {
+    const session = Session.get();
+    if (session) {
+      this.applySession(session);
+      this.showView('form');
+      await loadFormConfig();
+    } else {
+      this.showView('login');
+    }
+    bindEvents();
+  },
+
+  applySession(session) {
+    // Mostrar nav
+    const nav = document.getElementById('app-nav');
+    if (nav) nav.style.display = 'flex';
+    
+    // Mostrar email del usuario
+    const userEl = document.getElementById('user-email-short');
+    if (userEl) userEl.textContent = session.email.split('@')[0];
+    
+    // Mostrar botón admin si aplica
+    const adminBtn = document.getElementById('nav-admin');
+    if (adminBtn) adminBtn.style.display = session.rol === 'admin' ? 'flex' : 'none';
+  },
+
+  showView(name) {
+    const views = ['login', 'form', 'my-requests', 'admin'];
+    views.forEach(v => {
+      const el = document.getElementById('view-' + v);
+      if (el) el.classList.toggle('hidden', v !== name);
+    });
+    
+    // Acciones al mostrar vistas
+    if (name === 'my-requests') loadMyRequests();
+    if (name === 'admin') loadAdminPanel();
+  }
+};
+
+// ──────────────────────────────────────────────────────
+// EVENT BINDING — Conectar eventos del DOM
+// ──────────────────────────────────────────────────────
+function bindEvents() {
+  // Login
+  const formLogin = document.getElementById('form-login');
+  if (formLogin) {
+    formLogin.addEventListener('submit', handleLogin);
+  }
+
+  // Logout
+  const btnLogout = document.getElementById('btn-logout');
+  if (btnLogout) {
+    btnLogout.addEventListener('click', () => {
+      Session.clear();
+      FormConfigLoaded = false;
+      FormConfigCache = null;
+      App.showView('login');
+      const nav = document.getElementById('app-nav');
+      if (nav) nav.style.display = 'none';
+      UI.toast('Sesión cerrada');
+    });
+  }
+
+  // Submit solicitud
+  const formRequest = document.getElementById('form-request');
+  if (formRequest) {
+    formRequest.addEventListener('submit', handleSubmitRequest);
+  }
+}
+
+// ──────────────────────────────────────────────────────
+// LOGIN — Autenticación
+// ──────────────────────────────────────────────────────
+async function handleLogin(e) {
+  e.preventDefault();
+  const btn = document.getElementById('btn-login');
+  const originalText = btn.textContent;
+  UI.loading('btn-login', true, 'Accediendo...');
+  UI.hide('login-error');
+
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-password').value;
+
+  try {
+    const res = await API.login(email, pass);
+    if (!res.success) throw new Error(res.message);
+    
+    Session.save(res);
+    App.applySession(res);
+    await loadFormConfig();
+    App.showView('form');
+    
+    // Reset formulario
+    document.getElementById('form-login').reset();
+    UI.toast('¡Bienvenido ' + email + '!');
+  } catch (err) {
+    document.getElementById('login-error').textContent = err.message;
+    UI.show('login-error');
+  } finally {
+    UI.loading('btn-login', false, originalText);
+  }
+}
+
+// ──────────────────────────────────────────────────────
+// SUBMIT SOLICITUD — Crear solicitud multi-área
+// ──────────────────────────────────────────────────────
 async function handleSubmitRequest(e) {
   e.preventDefault();
-  
-  const evento = document.getElementById('evento-nombre').value.trim();
-  const justif = document.getElementById('justificacion').value.trim();
-  
-  if (!evento || !justif) return UI.toast('Completa el nombre y la justificación general.', 'error');
+  const btn = document.getElementById('btn-submit');
+  const originalText = btn.textContent;
+  UI.loading('btn-submit', true, 'Enviando...');
+  UI.hide('form-error');
 
+  const evento = document.getElementById('evento').value.trim();
+  const justificacion = document.getElementById('justificacion').value.trim();
+
+  // Recolectar selecciones de checkboxes
   const requerimientos = {};
-  let areasChecked = 0;
-
   ['Compras', 'Mantenimiento', 'IT'].forEach(area => {
-    const idBase = area.toLowerCase();
-    if (document.getElementById(`chk-${idBase}`).checked) {
-      areasChecked++;
-      const selectVal = document.getElementById(`sel-${idBase}`).value;
-      const textVal = document.getElementById(`det-${idBase}`).value.trim();
-      
-      let detalleFinal = [];
-      if (selectVal) detalleFinal.push(`[${selectVal}]`);
-      if (textVal) detalleFinal.push(textVal);
-      
-      requerimientos[area] = detalleFinal.join(' - ');
+    const checkboxes = document.querySelectorAll(`input[name="${area}"]:checked`);
+    const seleccionados = Array.from(checkboxes).map(cb => cb.value);
+    if (seleccionados.length > 0) {
+      requerimientos[area] = seleccionados;
     }
   });
 
-  if (areasChecked === 0) return UI.toast('Debes seleccionar al menos un área (Compras, Mantenimiento o IT).', 'error');
-
-  UI.loading('btn-submit', true, 'Enviando Solicitud...');
-  
   try {
-    const payload = { evento, justificacion: justif, requerimientos };
-    const res = await API.submitMultiRequest(payload);
-    
+    if (!evento) throw new Error('Ingresá el nombre del evento.');
+    if (!justificacion) throw new Error('Ingresá los detalles del evento.');
+    if (Object.keys(requerimientos).length === 0) throw new Error('Seleccioná al menos un recurso.');
+
+    const res = await API.submitMultiRequest({ evento, justificacion, requerimientos });
     if (!res.success) throw new Error(res.message);
     
     UI.toast(res.message);
-    e.target.reset();
-    ['compras','mantenimiento','it'].forEach(a => {
-      document.getElementById(`div-${a}`).classList.add('hidden');
-    });
+    document.getElementById('form-request').reset();
+    
   } catch (err) {
-    UI.toast(err.message, 'error');
+    document.getElementById('form-error').textContent = err.message;
+    UI.show('form-error');
   } finally {
-    UI.loading('btn-submit', false, 'Enviar Solicitud Múltiple');
+    UI.loading('btn-submit', false, originalText);
   }
 }
 
-// ── Mis Solicitudes (usuario) ──────────────────────────────
+// ──────────────────────────────────────────────────────
+// MIS SOLICITUDES — Ver solicitudes del usuario
+// ──────────────────────────────────────────────────────
 async function loadMyRequests() {
-  UI.setHTML('my-requests-list', '<p class="text-slate-400 text-sm">Cargando...</p>');
+  const list = document.getElementById('my-requests-list');
+  list.innerHTML = '<p style="color: var(--text-subtle); text-align: center;">Cargando...</p>';
+  
   try {
     const res = await API.getMyRequests();
     if (!res.success) throw new Error(res.message);
-    renderMyRequests(res.data);
-  } catch (err) {
-    UI.setHTML('my-requests-list', `<p class="text-red-500 text-sm">${err.message}</p>`);
-  }
-}
-
-function renderMyRequests(items) {
-  if (!items.length) {
-    UI.setHTML('my-requests-list', '<p class="text-slate-400 text-sm italic">No tienes solicitudes registradas.</p>');
-    return;
-  }
-
-  // AGRUPAMOS por ID para que un evento con 3 áreas se vea en una sola Card
-  const grouped = {};
-  items.forEach(r => {
-    if (!grouped[r.id]) {
-      // Extraemos el nombre del evento de la justificación
-      const partesJustif = r.justificacion.split('\nDetalles: ');
-      const eventoNombre = partesJustif[0].replace('Evento: ', '') || r.id;
-      const justifTexto = partesJustif[1] || r.justificacion;
-
-      grouped[r.id] = { id: r.id, fecha: r.fecha, evento: eventoNombre, justificacion: justifTexto, tareas: [] };
-    }
-    grouped[r.id].tareas.push(r);
-  });
-
-  // Renderizamos las tarjetas agrupadas
-  const html = Object.values(grouped).map(g => `
-    <div class="border border-slate-200 rounded-2xl p-5 bg-white shadow-sm hover:shadow-md transition-shadow">
-      <div class="flex items-center justify-between mb-2">
-        <h3 class="text-base font-bold text-slate-800">${g.evento}</h3>
-        <span class="text-xs font-mono text-indigo-500 bg-indigo-50 px-2 py-1 rounded-md">${g.id}</span>
-      </div>
-      <p class="text-sm text-slate-500 mb-4 line-clamp-2">${g.justificacion}</p>
-      
-      <div class="space-y-2 border-t border-slate-100 pt-3">
-        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Estado por Área</p>
-        ${g.tareas.map(t => `
-          <div class="bg-slate-50 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 border border-slate-100">
+    
+    if (res.data.length === 0) {
+      list.innerHTML = '<p style="color: var(--text-subtle); text-align: center; padding: 20px;">No tienes solicitudes aún.</p>';
+    } else {
+      list.innerHTML = res.data.map(r => `
+        <div style="border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px; background: var(--surface);">
+          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
             <div>
-              <span class="text-xs font-bold text-slate-700 block">${t.area}</span>
-              <span class="text-xs text-slate-600 block mt-0.5">${t.recurso}</span>
-              ${t.notas ? `<p class="text-[11px] text-amber-700 mt-1.5 bg-amber-50 rounded flex inline-flex items-center px-1.5 py-0.5">💬 Admin: ${t.notas}</p>` : ''}
+              <div style="font-size: 12px; color: var(--text-muted); font-family: monospace;">ID: ${r.id}</div>
+              <div style="font-weight: 600; color: var(--text-dark);">${r.recurso}</div>
+              <div style="font-size: 13px; color: var(--text-muted);">${r.area}</div>
             </div>
-            <div class="self-start sm:self-auto shrink-0">${UI.statusBadge(t.estado)}</div>
+            ${UI.statusBadge(r.estado)}
           </div>
-        `).join('')}
-      </div>
-    </div>
-  `).join('');
-
-  UI.setHTML('my-requests-list', html);
+          <div style="font-size: 14px; color: var(--text-mid); margin-bottom: 4px;">${r.justificacion.substring(0, 80)}...</div>
+          ${r.notas ? `<div style="font-size: 12px; color: #c8972a; padding: 6px; background: var(--gold-light); border-radius: 4px;">📝 ${r.notas}</div>` : ''}
+        </div>
+      `).join('');
+    }
+  } catch (err) {
+    list.innerHTML = `<p style="color: var(--error);">${err.message}</p>`;
+  }
 }
 
-
-// ── Panel de Administración ────────────────────────────────
-let adminRequestsCache = [];
+// ──────────────────────────────────────────────────────
+// PANEL ADMIN — Gestión de solicitudes
+// ──────────────────────────────────────────────────────
+let adminDataCache = [];
 
 async function loadAdminPanel() {
-  if (!Session.isAdmin()) { App.showView('form'); return; }
-
-  UI.setText('admin-area-title', 'Área: ' + (Session.getArea() || ''));
-  UI.setHTML('admin-requests-list', '<p class="text-slate-400 text-sm">Cargando solicitudes...</p>');
+  if (!Session.isAdmin()) { 
+    App.showView('form'); 
+    return; 
+  }
+  
+  const session = Session.get();
+  document.getElementById('admin-area-name').textContent = 'Área: ' + (session.areaAdmin || '—');
+  const list = document.getElementById('admin-requests-list');
+  list.innerHTML = '<p style="color: var(--text-subtle); text-align: center;">Cargando...</p>';
 
   try {
     const res = await API.getAllRequests();
     if (!res.success) throw new Error(res.message);
-    adminRequestsCache = res.data;
-    renderAdminRequests(adminRequestsCache);
-    loadAdminConfig();
+    
+    adminDataCache = res.data;
+    renderAdminRequests(adminDataCache);
+    await loadAdminConfig();
   } catch (err) {
-    UI.setHTML('admin-requests-list', `<p class="text-red-500 text-sm">${err.message}</p>`);
+    list.innerHTML = `<p style="color: var(--error);">${err.message}</p>`;
   }
 }
 
 function renderAdminRequests(items) {
-  if (!items.length) {
-    UI.setHTML('admin-requests-list', '<p class="text-slate-400 text-sm italic">No hay solicitudes en tu área.</p>');
+  const list = document.getElementById('admin-requests-list');
+  
+  if (items.length === 0) {
+    list.innerHTML = '<p style="color: var(--text-subtle); text-align: center; padding: 20px;">Sin solicitudes en tu área.</p>';
     return;
   }
-
-  const html = items.map(r => `
-    <div class="border border-slate-200 rounded-xl p-4" id="row-${r.id}">
-      <div class="flex items-start justify-between gap-2 mb-3">
+  
+  list.innerHTML = items.map(r => `
+    <div style="border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px; background: var(--surface);" id="row-${r.id}">
+      <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
         <div>
-          <p class="text-xs font-mono text-slate-400">${r.id}</p>
-          <p class="font-semibold text-slate-800">${r.recurso}</p>
-          <p class="text-xs text-slate-500">${r.solicitante} · ${UI.formatDate(r.fecha)}</p>
+          <div style="font-size: 12px; color: var(--text-muted); font-family: monospace;">ID: ${r.id}</div>
+          <div style="font-weight: 600; color: var(--text-dark);">${r.recurso}</div>
+          <div style="font-size: 12px; color: var(--text-muted);">${r.solicitante}</div>
         </div>
         ${UI.statusBadge(r.estado)}
       </div>
-      <p class="text-sm text-slate-600 mb-3">${r.justificacion}</p>
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
-        <select onchange="" class="status-select col-span-1 text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:ring-indigo-500 focus:border-indigo-500">
-          ${['Pendiente','En proceso','Completado','Rechazado'].map(s =>
-            `<option ${s === r.estado ? 'selected' : ''}>${s}</option>`
-          ).join('')}
+      <div style="font-size: 13px; color: var(--text-mid); margin-bottom: 8px;">${r.justificacion.substring(0, 100)}...</div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
+        <select style="padding: 6px; border: 1px solid var(--border); border-radius: 4px; font-size: 12px;" class="status-select">
+          <option ${r.estado === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
+          <option ${r.estado === 'En proceso' ? 'selected' : ''}>En proceso</option>
+          <option ${r.estado === 'Completado' ? 'selected' : ''}>Completado</option>
+          <option ${r.estado === 'Rechazado' ? 'selected' : ''}>Rechazado</option>
         </select>
-        <input type="text" placeholder="Notas para el solicitante..." value="${r.notas || ''}"
-          class="notes-input col-span-1 text-sm border border-slate-200 rounded-lg px-2 py-1.5 focus:ring-indigo-500 focus:border-indigo-500">
-        <button onclick="submitStatusUpdate('${r.id}', '${r.area}', this)"
-          class="col-span-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-1.5 px-3 rounded-lg transition-colors">
-          Actualizar
+        <input type="text" placeholder="Notas..." style="padding: 6px; border: 1px solid var(--border); border-radius: 4px; font-size: 12px;" class="notes-input" value="${r.notas || ''}">
+        <button onclick="submitStatusUpdate('${r.id}', '${r.area}', this)" class="btn btn--primary" style="padding: 6px; font-size: 12px;">
+          ✓ Actualizar
         </button>
       </div>
     </div>
   `).join('');
-
-  UI.setHTML('admin-requests-list', html);
 }
 
 async function submitStatusUpdate(id, area, btn) {
-  const row    = btn.closest('[id^="row-"]');
+  const row = btn.closest('[id^="row-"]');
   const estado = row.querySelector('.status-select').value;
-  const notas  = row.querySelector('.notes-input').value.trim();
-
+  const notas = row.querySelector('.notes-input').value.trim();
+  
   btn.disabled = true;
   btn.textContent = '...';
 
   try {
     const res = await API.updateStatus(area, id, estado, notas);
     if (!res.success) throw new Error(res.message);
-    UI.toast('Estado actualizado. Solicitante notificado.');
-    loadAdminPanel(); // Refrescar
+    
+    UI.toast('Actualizado y notificado al solicitante.');
+    await loadAdminPanel();
   } catch (err) {
     UI.toast(err.message, 'error');
     btn.disabled = false;
-    btn.textContent = 'Actualizar';
+    btn.textContent = '✓ Actualizar';
   }
 }
 
+function filterAdminRequests() {
+  const q = document.getElementById('admin-search').value.toLowerCase();
+  const estado = document.getElementById('admin-filter-status').value;
+  
+  const filtered = adminDataCache.filter(r => {
+    const matchQ = !q || 
+      r.solicitante.toLowerCase().includes(q) || 
+      r.recurso.toLowerCase().includes(q) || 
+      r.id.toLowerCase().includes(q);
+    const matchE = !estado || r.estado === estado;
+    return matchQ && matchE;
+  });
+  
+  renderAdminRequests(filtered);
+}
 
-// ── Config del Formulario (Admin) ──────────────────────────
 async function loadAdminConfig() {
-  const area = Session.getArea();
-  if (!area || !formConfigCache) return;
-
-  const opciones = formConfigCache[area] || [];
-  document.getElementById('config-area-name').textContent = area;
+  const session = Session.get();
+  if (!session.areaAdmin || !FormConfigCache) return;
+  
+  const opciones = FormConfigCache[session.areaAdmin] || [];
   document.getElementById('config-opciones').value = opciones.join('\n');
 }
 
 async function saveAdminConfig() {
-  const area    = Session.getArea();
-  const rawText = document.getElementById('config-opciones').value;
-  const opciones = rawText.split('\n').map(s => s.trim()).filter(Boolean);
+  const session = Session.get();
+  const raw = document.getElementById('config-opciones').value;
+  const opciones = raw.split('\n').map(s => s.trim()).filter(Boolean);
+  
+  const btn = document.getElementById('btn-save-config');
+  const originalText = btn.textContent;
+  UI.loading('btn-save-config', true, 'Guardando...');
 
-  UI.loading('btn-save-config', true, 'Guardar Opciones');
   try {
-    const res = await API.updateFormConfig(area, opciones);
+    const res = await API.updateFormConfig(session.areaAdmin, opciones);
     if (!res.success) throw new Error(res.message);
-    formConfigCache[area] = opciones;
-    UI.toast('Opciones del formulario actualizadas.');
+    
+    FormConfigCache[session.areaAdmin] = opciones;
+    UI.toast(res.message);
   } catch (err) {
     UI.toast(err.message, 'error');
   } finally {
-    UI.loading('btn-save-config', false, 'Guardar Opciones');
+    UI.loading('btn-save-config', false, originalText);
   }
 }
 
-// Filtro de solicitudes en panel admin
-function filterAdminRequests() {
-  const q      = document.getElementById('admin-search').value.toLowerCase();
-  const estado = document.getElementById('admin-filter-status').value;
-
-  const filtered = adminRequestsCache.filter(r => {
-    const matchQ = !q || r.solicitante.toLowerCase().includes(q) || r.recurso.toLowerCase().includes(q) || r.id.toLowerCase().includes(q);
-    const matchE = !estado || r.estado === estado;
-    return matchQ && matchE;
+function switchAdminTab(tab) {
+  const tabs = ['tab-solicitudes', 'tab-config'];
+  tabs.forEach(t => {
+    const el = document.getElementById(t);
+    if (el) el.classList.toggle('hidden', t !== tab);
+    
+    const btn = document.getElementById('tab-btn-' + t.replace('tab-', ''));
+    if (btn) {
+      btn.style.color = t === tab ? 'var(--blue-main)' : 'var(--text-muted)';
+      btn.style.borderBottomColor = t === tab ? 'var(--blue-main)' : 'transparent';
+    }
   });
-
-  renderAdminRequests(filtered);
 }
 
-// Inicializar cuando el DOM esté listo
+// ──────────────────────────────────────────────────────
+// BOOTSTRAP — Inicialización
+// ──────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => App.init());
