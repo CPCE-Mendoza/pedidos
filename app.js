@@ -93,7 +93,7 @@ async function loadFormConfig() {
 
 function renderCheckboxes() {
   if (!FormConfigCache) return;
-  ['Compras', 'Mantenimiento', 'IT'].forEach(area => {
+  ['Compras', 'Mantenimiento', 'Tecnica'].forEach(area => {
     const container = document.getElementById('area-' + area);
     if (!container) return;
     const opciones = FormConfigCache[area] || [];
@@ -232,7 +232,7 @@ async function handleSubmitRequest(e) {
 
   // Recolectar selecciones de checkboxes
   const requerimientos = {};
-  ['Compras', 'Mantenimiento', 'IT'].forEach(area => {
+  ['Compras', 'Mantenimiento', 'Tecnica'].forEach(area => {
     const checkboxes = document.querySelectorAll(`input[name="${area}"]:checked`);
     const seleccionados = Array.from(checkboxes).map(cb => cb.value);
     if (seleccionados.length > 0) {
