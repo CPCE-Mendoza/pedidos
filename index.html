@@ -73,16 +73,27 @@
             <div class="field">
               <label class="field__label" for="evento">Nombre del evento <span class="field__required">*</span></label>
               <input id="evento" type="text" name="evento" required 
-                placeholder="Ej: Capacitación de Contabilidad 2024"
+                placeholder="Ej: Capacitación, evento"
                 class="field__input">
             </div>
 
-            <div class="field">
-              <label class="field__label" for="justificacion">Detalles y contexto <span class="field__required">*</span></label>
-              <textarea id="justificacion" name="justificacion" required 
-                placeholder="Fechas, cantidad de asistentes, descripción general del evento..."
-                class="field__textarea"></textarea>
-            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+  <div class="field">
+    <label class="field__label" for="fecha">Fecha <span class="field__required">*</span></label>
+    <input id="fecha" type="date" name="fecha" required class="field__input">
+  </div>
+
+  <div class="field">
+    <label class="field__label" for="horario">Horario <span class="field__required">*</span></label>
+    <input id="horario" type="time" name="horario" required class="field__input">
+  </div>
+</div>
+
+<div class="field">
+  <label class="field__label" for="asistentes">Cantidad de personas <span class="field__required">*</span></label>
+  <input id="asistentes" type="number" name="asistentes" min="1" required 
+    placeholder="Ej: 50" class="field__input">
+</div>
           </div>
 
           <div class="form__section">

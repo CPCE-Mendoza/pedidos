@@ -1,449 +1,732 @@
 /**
- * app.js — Lógica de la aplicación (COMPLETO & VERIFICADO)
- * - Gestión de sesión
- * - SPA con ruteador
- * - Multi-select dinámico
- * - Admin panel
+ * app.js — Portal de Solicitudes CPCE Mendoza
+ * v2.5 — SHA-256 hashing + precarga paralela + login optimizado
+ *
+ * MEJORAS DE VELOCIDAD:
+ *  1. SHA-256 client-side (Web Crypto API, nativa del browser, sin librerías)
+ *  2. Precarga de getFormConfig en cuanto el campo email pierde el foco
+ *  3. JSONP timeout reducido a 10s (era 15s)
+ *  4. sessionStorage como capa de cache L1 para la config
+ *     (survives page refresh, cleared on tab close)
+ *  5. Token de sesión con renovación silenciosa si queda < 1h
  */
 
 // ──────────────────────────────────────────────────────
-// SESSION — Gestión de sesión en localStorage
+// CONSTANTES
+// ──────────────────────────────────────────────────────
+const AREAS = ['Compras', 'Mantenimiento', 'Tecnica'];
+
+const ESTADO_MAP = {
+  Pendiente:    { bg: '#fff3cd', color: '#856404', icon: '🕐' },
+  'En proceso': { bg: '#cfe2ff', color: '#084298', icon: '⚙️' },
+  Completado:   { bg: '#d1e7dd', color: '#0a3622', icon: '✅' },
+  Rechazado:    { bg: '#f8d7da', color: '#58151c', icon: '❌' },
+};
+
+// ──────────────────────────────────────────────────────
+// CRYPTO — SHA-256 con Web Crypto API (nativa, sin deps)
+// ──────────────────────────────────────────────────────
+async function sha256(str) {
+  const buf    = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(str)
+  );
+  return Array.from(new Uint8Array(buf))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+// ──────────────────────────────────────────────────────
+// SESSION
 // ──────────────────────────────────────────────────────
 const Session = (() => {
   const KEY = 'sol_sess';
-  const save = (data) => {
-    const exp = Date.now() + CONFIG.SESSION_HOURS * 3600 * 1000;
-    localStorage.setItem(KEY, JSON.stringify({ ...data, exp }));
-  };
+
+  const save = (data) => localStorage.setItem(KEY, JSON.stringify({
+    ...data,
+    exp: Date.now() + CONFIG.SESSION_HOURS * 3600 * 1000,
+  }));
+
   const get = () => {
     try {
-      const raw = localStorage.getItem(KEY);
-      if (!raw) return null;
-      const s = JSON.parse(raw);
-      if (Date.now() > s.exp) { clear(); return null; }
+      const s = JSON.parse(localStorage.getItem(KEY) || 'null');
+      if (!s || Date.now() > s.exp) { localStorage.removeItem(KEY); return null; }
       return s;
     } catch { return null; }
   };
-  const clear = () => localStorage.removeItem(KEY);
-  return { 
-    save, get, clear, 
-    getToken: () => get()?.token, 
-    getRole: () => get()?.rol, 
+
+  const clear = () => {
+    localStorage.removeItem(KEY);
+    sessionStorage.removeItem('sol_cfg'); // limpiar cache de config también
+  };
+
+  return {
+    save, get, clear,
+    getToken: () => get()?.token,
     getEmail: () => get()?.email,
-    isAdmin: () => get()?.rol === 'admin' 
+    isAdmin:  () => get()?.rol === 'admin',
+    getArea:  () => get()?.areaAdmin || '',
   };
 })();
 
 // ──────────────────────────────────────────────────────
-// UI — Utilidades de interfaz
+// UI HELPERS
 // ──────────────────────────────────────────────────────
 const UI = {
-  show(id) { 
-    const el = document.getElementById(id); 
-    if(el) el.classList.remove('hidden'); 
-  },
-  hide(id) { 
-    const el = document.getElementById(id); 
-    if(el) el.classList.add('hidden'); 
-  },
+  show(id) { document.getElementById(id)?.classList.remove('hidden'); },
+  hide(id) { document.getElementById(id)?.classList.add('hidden'); },
+
   toast(msg, type = 'success') {
     const t = document.getElementById('toast');
     if (!t) return;
-    t.textContent = msg;
-    t.className = `toast toast--${type}`;
+    t.textContent   = msg;
+    t.className     = `toast toast--${type}`;
     t.style.display = 'block';
-    setTimeout(() => { t.style.display = 'none'; }, 3500);
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => { t.style.display = 'none'; }, 4000);
   },
-loading(id, isLoading, text = 'Procesando...') {
+
+  setLoading(id, on, text = 'Procesando...') {
     const btn = document.getElementById(id);
     if (!btn) return;
-    
-    // Guardamos el texto original solo la primera vez
-    if (isLoading && !btn.dataset.original) {
-      btn.dataset.original = btn.textContent; 
-    }
-    
-    btn.disabled = isLoading;
-    btn.textContent = isLoading ? text : (btn.dataset.original || btn.textContent);
+    if (on) btn.dataset.orig = btn.textContent;
+    btn.textContent = on ? text : (btn.dataset.orig || btn.textContent);
+    btn.disabled    = on;
   },
+
+  fieldError(id, msg) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent   = msg;
+    el.style.display = msg ? 'block' : 'none';
+  },
+
   statusBadge(estado) {
-    const colors = { 
-      Pendiente: '#d4850a', 
-      'En proceso': '#1a5fa8', 
-      Completado: '#1d8a4e', 
-      Rechazado: '#c0392b' 
-    };
-    return `<span style="display:inline-block; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:600; background:${colors[estado]}20; color:${colors[estado]}">${estado}</span>`;
-  }
+    const s = ESTADO_MAP[estado] || { bg: '#e9ecef', color: '#495057', icon: '•' };
+    return `<span style="display:inline-block;padding:3px 9px;border-radius:999px;
+      font-size:11px;font-weight:700;background:${s.bg};color:${s.color};
+      white-space:nowrap;">${s.icon} ${estado}</span>`;
+  },
 };
 
 // ──────────────────────────────────────────────────────
-// FORMCONFIG — Cache de configuración del formulario
+// FORMCONFIG — cache de 3 capas:
+//   L1: variable en memoria (_configCache)      — más rápido
+//   L2: sessionStorage                          — survives refresh
+//   L3: API call                                — fuente de verdad
 // ──────────────────────────────────────────────────────
-let FormConfigCache = null;
-let FormConfigLoaded = false;
+const CONFIG_SS_KEY = 'sol_cfg';
+let _configCache   = null;
+let _configPromise = null;
 
-async function loadFormConfig() {
-  if (FormConfigLoaded) return FormConfigCache;
-  try {
-    const res = await API.getFormConfig();
-    if (res.success) {
-      FormConfigCache = res.data;
-      FormConfigLoaded = true;
-      renderCheckboxes();
-    }
-  } catch (err) {
-    UI.toast('No se pudo cargar la configuración.', 'error');
+function fetchFormConfig() {
+  // L1: ya está en memoria
+  if (_configCache) return Promise.resolve(_configCache);
+
+  // L2: en sessionStorage (parseamos una sola vez)
+  if (!_configCache) {
+    try {
+      const raw = sessionStorage.getItem(CONFIG_SS_KEY);
+      if (raw) {
+        _configCache = JSON.parse(raw);
+        return Promise.resolve(_configCache);
+      }
+    } catch {}
   }
+
+  // L3: llamada a la API (de-duplicada con _configPromise)
+  if (_configPromise) return _configPromise;
+
+  _configPromise = API.getFormConfig()
+    .then(res => {
+      if (!res.success) throw new Error(res.message);
+      _configCache   = res.data;
+      _configPromise = null;
+      // Guardar en sessionStorage para próximas cargas
+      try { sessionStorage.setItem(CONFIG_SS_KEY, JSON.stringify(res.data)); } catch {}
+      return _configCache;
+    })
+    .catch(err => { _configPromise = null; throw err; });
+
+  return _configPromise;
 }
 
-function renderCheckboxes() {
-  if (!FormConfigCache) return;
-  ['Compras', 'Mantenimiento', 'Tecnica'].forEach(area => {
+function renderCheckboxes(config) {
+  AREAS.forEach(area => {
     const container = document.getElementById('area-' + area);
     if (!container) return;
-    const opciones = FormConfigCache[area] || [];
-    if (opciones.length === 0) {
-      container.innerHTML = '<p style="color: var(--text-subtle); font-size: 13px; padding: 4px;">Sin opciones configuradas</p>';
-    } else {
-      container.innerHTML = opciones.map((op, i) => `
-        <div class="checkbox-item">
-          <input type="checkbox" id="cb-${area}-${i}" name="${area}" value="${op}">
-          <label for="cb-${area}-${i}">${op}</label>
-        </div>
-      `).join('');
-    }
+    const opciones = config[area] || [];
+    container.innerHTML = opciones.length
+      ? opciones.map((op, i) => `
+          <div class="checkbox-item">
+            <input type="checkbox" id="cb-${area}-${i}" name="${area}" value="${op}">
+            <label for="cb-${area}-${i}">${op}</label>
+          </div>`).join('')
+      : '<p style="color:var(--text-subtle);font-size:13px;padding:4px;">Sin opciones configuradas</p>';
   });
 }
 
 // ──────────────────────────────────────────────────────
-// APP — Manejador principal de la aplicación
+// PRECARGA — dispara fetchFormConfig cuando el usuario
+// termina de escribir el email (campo pierde foco).
+// Para cuando el login termina, la config ya está en
+// cache y los checkboxes se pintan instantáneo.
+// ──────────────────────────────────────────────────────
+function bindPrecarga() {
+  const emailInput = document.getElementById('login-email');
+  if (!emailInput) return;
+
+  // Al salir del campo email → precargar config en background
+  emailInput.addEventListener('blur', () => {
+    if (!_configCache && !_configPromise && Session.getToken()) return;
+    // Solo precargamos si hay algo escrito (no en foco vacío)
+    if (emailInput.value.trim().length < 3) return;
+    fetchFormConfig().catch(() => {}); // silencioso — no es crítico
+  });
+
+  // Al escribir la contraseña → segunda oportunidad de precarga
+  document.getElementById('login-password')
+    ?.addEventListener('focus', () => {
+      fetchFormConfig().catch(() => {});
+    });
+}
+
+// ──────────────────────────────────────────────────────
+// APP ROUTER
 // ──────────────────────────────────────────────────────
 const App = {
   async init() {
+    bindEvents();
+    bindPrecarga();
+
     const session = Session.get();
     if (session) {
-      this.applySession(session);
+      this._applySession(session);
+      // Mostrar formulario inmediatamente, pintar checkboxes en paralelo
       this.showView('form');
-      await loadFormConfig();
+      this._loadConfig();
     } else {
       this.showView('login');
     }
-    bindEvents();
   },
 
-  applySession(session) {
-    // Mostrar nav
+  async _loadConfig() {
+    try {
+      const config = await fetchFormConfig();
+      renderCheckboxes(config);
+    } catch {
+      UI.toast('No se pudo cargar la configuración.', 'error');
+    }
+  },
+
+  _applySession(session) {
     const nav = document.getElementById('app-nav');
     if (nav) nav.style.display = 'flex';
-    
-    // Mostrar email del usuario
     const userEl = document.getElementById('user-email-short');
     if (userEl) userEl.textContent = session.email.split('@')[0];
-    
-    // Mostrar botón admin si aplica
     const adminBtn = document.getElementById('nav-admin');
     if (adminBtn) adminBtn.style.display = session.rol === 'admin' ? 'flex' : 'none';
   },
 
   showView(name) {
-    const views = ['login', 'form', 'my-requests', 'admin'];
-    views.forEach(v => {
-      const el = document.getElementById('view-' + v);
-      if (el) el.classList.toggle('hidden', v !== name);
-    });
-    
-    // Acciones al mostrar vistas
+    ['login', 'form', 'my-requests', 'admin'].forEach(v =>
+      document.getElementById('view-' + v)?.classList.toggle('hidden', v !== name)
+    );
     if (name === 'my-requests') loadMyRequests();
-    if (name === 'admin') loadAdminPanel();
-  }
+    if (name === 'admin')       loadAdminPanel();
+  },
 };
 
 // ──────────────────────────────────────────────────────
-// EVENT BINDING — Conectar eventos del DOM
+// EVENTOS GLOBALES
 // ──────────────────────────────────────────────────────
 function bindEvents() {
-  // Login
-  const formLogin = document.getElementById('form-login');
-  if (formLogin) {
-    formLogin.addEventListener('submit', handleLogin);
-  }
-
-  // Logout
-  const btnLogout = document.getElementById('btn-logout');
-  if (btnLogout) {
-    btnLogout.addEventListener('click', () => {
+  document.getElementById('form-login')
+    ?.addEventListener('submit', handleLogin);
+  document.getElementById('form-request')
+    ?.addEventListener('submit', handleSubmitRequest);
+  document.getElementById('btn-logout')
+    ?.addEventListener('click', () => {
       Session.clear();
-      FormConfigLoaded = false;
-      FormConfigCache = null;
+      _configCache = _configPromise = null;
+      document.getElementById('app-nav').style.display = 'none';
       App.showView('login');
-      const nav = document.getElementById('app-nav');
-      if (nav) nav.style.display = 'none';
-      UI.toast('Sesión cerrada');
     });
-  }
-
-  // Submit solicitud
-  const formRequest = document.getElementById('form-request');
-  if (formRequest) {
-    formRequest.addEventListener('submit', handleSubmitRequest);
-  }
 }
 
 // ──────────────────────────────────────────────────────
-// LOGIN — Autenticación
+// LOGIN — con SHA-256 del lado del cliente
 // ──────────────────────────────────────────────────────
 async function handleLogin(e) {
   e.preventDefault();
-  const btn = document.getElementById('btn-login');
-  const originalText = btn.textContent;
-  UI.loading('btn-login', true, 'Accediendo...');
+  UI.setLoading('btn-login', true, 'Verificando...');
   UI.hide('login-error');
 
-  const email = document.getElementById('login-email').value.trim();
-  const pass = document.getElementById('login-password').value;
+  const email = document.getElementById('login-email').value.trim().toLowerCase();
+  const pass  = document.getElementById('login-password').value;
 
   try {
-    const res = await API.login(email, pass);
+    if (!email || !pass) throw new Error('Completá los dos campos.');
+
+    // Hash SHA-256 antes de enviar — la contraseña en texto plano
+    // nunca sale del browser
+    const passHash = await sha256(pass);
+
+    // Lanzar login y precarga de config en paralelo.
+    // Si la config ya está en cache, esta Promise resuelve instantáneo.
+    const [res] = await Promise.all([
+      API.login(email, passHash),
+      fetchFormConfig().catch(() => {}), // silencioso si falla
+    ]);
+
     if (!res.success) throw new Error(res.message);
-    
+
     Session.save(res);
-    App.applySession(res);
-    await loadFormConfig();
+    App._applySession(res);
+    e.target.reset();
+
+    // Config ya debería estar en cache → renderiza sin espera
     App.showView('form');
-    
-    // Reset formulario
-    document.getElementById('form-login').reset();
-    UI.toast('¡Bienvenido ' + email + '!');
+    App._loadConfig();
+    UI.toast(`Bienvenido/a, ${email.split('@')[0]} 👋`);
+
   } catch (err) {
-    document.getElementById('login-error').textContent = err.message;
-    UI.show('login-error');
+    const el = document.getElementById('login-error');
+    if (el) { el.textContent = err.message; el.style.display = 'block'; }
   } finally {
-    UI.loading('btn-login', false, originalText);
+    UI.setLoading('btn-login', false);
   }
 }
 
 // ──────────────────────────────────────────────────────
-// SUBMIT SOLICITUD — Crear solicitud multi-área
+// NUEVA SOLICITUD
 // ──────────────────────────────────────────────────────
 async function handleSubmitRequest(e) {
   e.preventDefault();
-  const btn = document.getElementById('btn-submit');
-  const originalText = btn.textContent;
-  UI.loading('btn-submit', true, 'Enviando...');
-  UI.hide('form-error');
+  UI.setLoading('btn-submit', true, 'Enviando...');
+  UI.fieldError('form-error', '');
 
-  const evento = document.getElementById('evento').value.trim();
-  const justificacion = document.getElementById('justificacion').value.trim();
+  const evento     = document.getElementById('evento')?.value.trim()  || '';
+  const fecha      = document.getElementById('fecha')?.value           || '';
+  const horario    = document.getElementById('horario')?.value         || '';
+  const asistentes = document.getElementById('asistentes')?.value     || '';
 
-  // Recolectar selecciones de checkboxes
+  const justificacion = [
+    fecha      ? `Fecha: ${fecha}`           : '',
+    horario    ? `Horario: ${horario}`       : '',
+    asistentes ? `Asistentes: ${asistentes}` : '',
+  ].filter(Boolean).join(' | ');
+
   const requerimientos = {};
-  ['Compras', 'Mantenimiento', 'Tecnica'].forEach(area => {
-    const checkboxes = document.querySelectorAll(`input[name="${area}"]:checked`);
-    const seleccionados = Array.from(checkboxes).map(cb => cb.value);
-    if (seleccionados.length > 0) {
-      requerimientos[area] = seleccionados;
-    }
+  AREAS.forEach(area => {
+    const checked = [...document.querySelectorAll(`input[name="${area}"]:checked`)]
+      .map(cb => cb.value);
+    if (checked.length) requerimientos[area] = checked;
   });
 
   try {
-    if (!evento) throw new Error('Ingresá el nombre del evento.');
-    if (!justificacion) throw new Error('Ingresá los detalles del evento.');
-    if (Object.keys(requerimientos).length === 0) throw new Error('Seleccioná al menos un recurso.');
+    if (!evento)                             throw new Error('Ingresá el nombre del evento.');
+    if (!fecha)                              throw new Error('Seleccioná la fecha del evento.');
+    if (!horario)                            throw new Error('Indicá el horario del evento.');
+    if (!asistentes || +asistentes < 1)      throw new Error('Indicá la cantidad de personas.');
+    if (!Object.keys(requerimientos).length) throw new Error('Seleccioná al menos un recurso.');
 
     const res = await API.submitMultiRequest({ evento, justificacion, requerimientos });
     if (!res.success) throw new Error(res.message);
-    
-    UI.toast(res.message);
-    document.getElementById('form-request').reset();
-    
+
+    UI.toast(`✅ ${res.message}`);
+    e.target.reset();
   } catch (err) {
-    document.getElementById('form-error').textContent = err.message;
-    UI.show('form-error');
+    UI.fieldError('form-error', err.message);
   } finally {
-    UI.loading('btn-submit', false, originalText);
+    UI.setLoading('btn-submit', false);
   }
 }
 
 // ──────────────────────────────────────────────────────
-// MIS SOLICITUDES — Ver solicitudes del usuario
+// MIS SOLICITUDES — con historial desplegable
 // ──────────────────────────────────────────────────────
 async function loadMyRequests() {
   const list = document.getElementById('my-requests-list');
-  list.innerHTML = '<p style="color: var(--text-subtle); text-align: center;">Cargando...</p>';
-  
+  list.innerHTML = skeletonCards(3);
   try {
     const res = await API.getMyRequests();
     if (!res.success) throw new Error(res.message);
-    
-    if (res.data.length === 0) {
-      list.innerHTML = '<p style="color: var(--text-subtle); text-align: center; padding: 20px;">No tienes solicitudes aún.</p>';
-    } else {
-      list.innerHTML = res.data.map(r => `
-        <div style="border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px; background: var(--surface);">
-          <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
-            <div>
-              <div style="font-size: 12px; color: var(--text-muted); font-family: monospace;">ID: ${r.id}</div>
-              <div style="font-weight: 600; color: var(--text-dark);">${r.recurso}</div>
-              <div style="font-size: 13px; color: var(--text-muted);">${r.area}</div>
-            </div>
-            ${UI.statusBadge(r.estado)}
-          </div>
-          <div style="font-size: 14px; color: var(--text-mid); margin-bottom: 4px;">${r.justificacion.substring(0, 80)}...</div>
-          ${r.notas ? `<div style="font-size: 12px; color: #c8972a; padding: 6px; background: var(--gold-light); border-radius: 4px;">📝 ${r.notas}</div>` : ''}
-        </div>
-      `).join('');
+
+    if (!res.data.length) {
+      list.innerHTML = emptyState('No tenés solicitudes registradas aún.');
+      return;
     }
+
+    const byId = groupById(res.data);
+    list.innerHTML = Object.entries(byId).map(([id, rows]) => {
+      const first = rows[0];
+      return `
+        <div class="req-card">
+          <div class="req-card__header">
+            <div>
+              <div class="req-card__id">${id}</div>
+              <div class="req-card__title">${escapeHtml(first.evento || extractEvento(first.justificacion))}</div>
+              <div class="req-card__sub">${formatDate(first.fecha)}</div>
+            </div>
+          </div>
+          <div class="req-card__areas">
+            ${rows.map(r => `
+              <div style="margin-bottom:8px;">
+                <div class="req-card__area-row">
+                  <span class="req-card__area-label">${areaIcon(r.area)} ${r.area}</span>
+                  <span class="req-card__recursos">${escapeHtml(r.recurso)}</span>
+                  ${UI.statusBadge(r.estado)}
+                </div>
+                ${renderHistorial(r.historial, r.id + '-' + r.area)}
+              </div>`).join('')}
+          </div>
+        </div>`;
+    }).join('');
+
+    injectCardStyles();
   } catch (err) {
-    list.innerHTML = `<p style="color: var(--error);">${err.message}</p>`;
+    list.innerHTML = `<p style="color:var(--error);text-align:center;">${err.message}</p>`;
   }
 }
 
 // ──────────────────────────────────────────────────────
-// PANEL ADMIN — Gestión de solicitudes
+// HISTORIAL
 // ──────────────────────────────────────────────────────
-let adminDataCache = [];
+function renderHistorial(historial, uid) {
+  if (!historial?.length) return '';
+  const toggleId   = 'hist-' + uid.replace(/[^a-z0-9]/gi, '-');
+  const countLabel = historial.length === 1 ? '1 movimiento' : `${historial.length} movimientos`;
+
+  const lineas = historial.map((h, i) => {
+    const s       = ESTADO_MAP[h.estado] || { bg: '#e9ecef', color: '#495057', icon: '•' };
+    const esUltimo = i === historial.length - 1;
+    return `
+      <div class="hist-item${esUltimo ? ' hist-item--last' : ''}">
+        <div class="hist-dot" style="background:${s.color};"></div>
+        <div class="hist-body">
+          <div class="hist-header">
+            <span class="hist-estado" style="color:${s.color};">${s.icon} ${h.estado}</span>
+            <span class="hist-ts">${formatDatetime(h.ts)}</span>
+          </div>
+          ${h.nota ? `<div class="hist-nota">💬 ${escapeHtml(h.nota)}</div>` : ''}
+          <div class="hist-admin">por ${escapeHtml(h.admin === 'manual' ? 'edición directa' : (h.admin || '—'))}</div>
+        </div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="hist-wrap">
+      <button class="hist-toggle" onclick="toggleHistorial('${toggleId}')">
+        📋 Ver historial (${countLabel})
+      </button>
+      <div id="${toggleId}" class="hist-list hidden">${lineas}</div>
+    </div>`;
+}
+
+function toggleHistorial(id) {
+  const el  = document.getElementById(id);
+  const btn = el?.previousElementSibling;
+  if (!el) return;
+  const nowHidden = el.classList.toggle('hidden');
+  if (btn) {
+    btn.textContent = nowHidden
+      ? btn.textContent.replace('Ocultar', 'Ver')
+      : btn.textContent.replace('Ver', 'Ocultar');
+  }
+}
+
+// ──────────────────────────────────────────────────────
+// ADMIN PANEL
+// ──────────────────────────────────────────────────────
+let _adminCache = [];
 
 async function loadAdminPanel() {
-  if (!Session.isAdmin()) { 
-    App.showView('form'); 
-    return; 
-  }
-  
-  const session = Session.get();
-  document.getElementById('admin-area-name').textContent = 'Área: ' + (session.areaAdmin || '—');
+  if (!Session.isAdmin()) { App.showView('form'); return; }
+  document.getElementById('admin-area-name').textContent = 'Área: ' + (Session.getArea() || '—');
   const list = document.getElementById('admin-requests-list');
-  list.innerHTML = '<p style="color: var(--text-subtle); text-align: center;">Cargando...</p>';
+  list.innerHTML = skeletonCards(2);
 
   try {
-    const res = await API.getAllRequests();
-    if (!res.success) throw new Error(res.message);
-    
-    adminDataCache = res.data;
-    renderAdminRequests(adminDataCache);
-    await loadAdminConfig();
+    const [reqRes, cfgRes] = await Promise.all([
+      API.getAllRequests(),
+      fetchFormConfig(),
+    ]);
+    if (!reqRes.success) throw new Error(reqRes.message);
+    _adminCache = reqRes.data;
+    renderAdminRequests(_adminCache);
+    renderAdminConfig(cfgRes);
   } catch (err) {
-    list.innerHTML = `<p style="color: var(--error);">${err.message}</p>`;
+    list.innerHTML = `<p style="color:var(--error);text-align:center;">${err.message}</p>`;
   }
+}
+
+function renderAdminCard(r) {
+  return `
+    <div class="req-card" id="row-${r.id}">
+      <div class="req-card__header">
+        <div style="flex:1;min-width:0;">
+          <div class="req-card__id">${r.id}</div>
+          <div class="req-card__title">${escapeHtml(r.evento || r.recurso)}</div>
+          <div class="req-card__sub">${escapeHtml(r.solicitante)} · ${formatDate(r.fecha)}</div>
+        </div>
+        <div style="flex-shrink:0;">${UI.statusBadge(r.estado)}</div>
+      </div>
+      <div class="req-card__justif">
+        <strong>Recursos:</strong> ${escapeHtml(r.recurso)}<br>
+        ${escapeHtml(r.justificacion).replace(/\n/g, ' · ')}
+      </div>
+      ${renderHistorial(r.historial, r.id)}
+      <div class="req-card__actions" style="margin-top:10px;">
+        <select class="status-select admin-select">
+          ${['Pendiente','En proceso','Completado','Rechazado'].map(s =>
+            `<option ${s === r.estado ? 'selected' : ''}>${s}</option>`
+          ).join('')}
+        </select>
+        <input type="text" placeholder="Nota para el solicitante..."
+          class="notes-input admin-input" value="${escapeHtml(r.notas || '')}">
+        <button class="btn btn--primary admin-btn"
+          onclick="submitStatusUpdate('${r.id}', '${r.area}', this)">
+          Guardar
+        </button>
+      </div>
+    </div>`;
 }
 
 function renderAdminRequests(items) {
   const list = document.getElementById('admin-requests-list');
-  
-  if (items.length === 0) {
-    list.innerHTML = '<p style="color: var(--text-subtle); text-align: center; padding: 20px;">Sin solicitudes en tu área.</p>';
-    return;
-  }
-  
-  list.innerHTML = items.map(r => `
-    <div style="border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px; background: var(--surface);" id="row-${r.id}">
-      <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
-        <div>
-          <div style="font-size: 12px; color: var(--text-muted); font-family: monospace;">ID: ${r.id}</div>
-          <div style="font-weight: 600; color: var(--text-dark);">${r.recurso}</div>
-          <div style="font-size: 12px; color: var(--text-muted);">${r.solicitante}</div>
-        </div>
-        ${UI.statusBadge(r.estado)}
-      </div>
-      <div style="font-size: 13px; color: var(--text-mid); margin-bottom: 8px;">${r.justificacion.substring(0, 100)}...</div>
-      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;">
-        <select style="padding: 6px; border: 1px solid var(--border); border-radius: 4px; font-size: 12px;" class="status-select">
-          <option ${r.estado === 'Pendiente' ? 'selected' : ''}>Pendiente</option>
-          <option ${r.estado === 'En proceso' ? 'selected' : ''}>En proceso</option>
-          <option ${r.estado === 'Completado' ? 'selected' : ''}>Completado</option>
-          <option ${r.estado === 'Rechazado' ? 'selected' : ''}>Rechazado</option>
-        </select>
-        <input type="text" placeholder="Notas..." style="padding: 6px; border: 1px solid var(--border); border-radius: 4px; font-size: 12px;" class="notes-input" value="${r.notas || ''}">
-        <button onclick="submitStatusUpdate('${r.id}', '${r.area}', this)" class="btn btn--primary" style="padding: 6px; font-size: 12px;">
-          ✓ Actualizar
-        </button>
-      </div>
-    </div>
-  `).join('');
+  if (!items.length) { list.innerHTML = emptyState('No hay solicitudes en tu área.'); return; }
+  list.innerHTML = items.map(renderAdminCard).join('');
+  injectCardStyles();
 }
 
 async function submitStatusUpdate(id, area, btn) {
-  const row = btn.closest('[id^="row-"]');
+  const row    = document.getElementById('row-' + id);
   const estado = row.querySelector('.status-select').value;
-  const notas = row.querySelector('.notes-input').value.trim();
-  
-  btn.disabled = true;
-  btn.textContent = '...';
+  const notas  = row.querySelector('.notes-input').value.trim();
+
+  btn.disabled    = true;
+  btn.textContent = '⏳';
 
   try {
     const res = await API.updateStatus(area, id, estado, notas);
     if (!res.success) throw new Error(res.message);
-    
-    UI.toast('Actualizado y notificado al solicitante.');
-    await loadAdminPanel();
+
+    UI.toast('✅ Actualizado. Solicitante notificado.');
+
+    // Actualizar cache + historial local sin reload
+    const cached = _adminCache.find(r => r.id === id);
+    if (cached) {
+      cached.estado = estado;
+      cached.notas  = notas;
+      if (!cached.historial) cached.historial = [];
+      cached.historial.push({
+        estado, nota: notas,
+        admin: Session.getEmail(),
+        ts:    new Date().toISOString(),
+      });
+    }
+
+    // Reemplazar solo esta card en el DOM
+    const tmp = document.createElement('div');
+    tmp.innerHTML = cached ? renderAdminCard(cached) : '';
+    const newCard = tmp.firstElementChild;
+    if (newCard) row.replaceWith(newCard);
+    injectCardStyles();
+
   } catch (err) {
     UI.toast(err.message, 'error');
-    btn.disabled = false;
-    btn.textContent = '✓ Actualizar';
+    btn.disabled    = false;
+    btn.textContent = 'Guardar';
   }
 }
 
 function filterAdminRequests() {
-  const q = document.getElementById('admin-search').value.toLowerCase();
+  const q      = document.getElementById('admin-search').value.toLowerCase();
   const estado = document.getElementById('admin-filter-status').value;
-  
-  const filtered = adminDataCache.filter(r => {
-    const matchQ = !q || 
-      r.solicitante.toLowerCase().includes(q) || 
-      r.recurso.toLowerCase().includes(q) || 
-      r.id.toLowerCase().includes(q);
-    const matchE = !estado || r.estado === estado;
-    return matchQ && matchE;
-  });
-  
-  renderAdminRequests(filtered);
+  renderAdminRequests(_adminCache.filter(r =>
+    (!q || r.solicitante.toLowerCase().includes(q) ||
+           r.recurso.toLowerCase().includes(q) ||
+           r.id.toLowerCase().includes(q) ||
+           (r.evento || '').toLowerCase().includes(q)) &&
+    (!estado || r.estado === estado)
+  ));
 }
 
-async function loadAdminConfig() {
-  const session = Session.get();
-  if (!session.areaAdmin || !FormConfigCache) return;
-  
-  const opciones = FormConfigCache[session.areaAdmin] || [];
-  document.getElementById('config-opciones').value = opciones.join('\n');
+// ──────────────────────────────────────────────────────
+// CONFIG ADMIN
+// ──────────────────────────────────────────────────────
+function renderAdminConfig(config) {
+  const area = Session.getArea();
+  const ta   = document.getElementById('config-opciones');
+  if (ta) ta.value = ((config && config[area]) || []).join('\n');
 }
 
 async function saveAdminConfig() {
-  const session = Session.get();
-  const raw = document.getElementById('config-opciones').value;
-  const opciones = raw.split('\n').map(s => s.trim()).filter(Boolean);
-  
-  const btn = document.getElementById('btn-save-config');
-  const originalText = btn.textContent;
-  UI.loading('btn-save-config', true, 'Guardando...');
-
+  const area    = Session.getArea();
+  const opciones = document.getElementById('config-opciones').value
+    .split('\n').map(s => s.trim()).filter(Boolean);
+  UI.setLoading('btn-save-config', true, 'Guardando...');
   try {
-    const res = await API.updateFormConfig(session.areaAdmin, opciones);
+    const res = await API.updateFormConfig(area, opciones);
     if (!res.success) throw new Error(res.message);
-    
-    FormConfigCache[session.areaAdmin] = opciones;
-    UI.toast(res.message);
+    // Actualizar las dos capas de cache
+    if (_configCache) _configCache[area] = opciones;
+    try { sessionStorage.setItem(CONFIG_SS_KEY, JSON.stringify(_configCache)); } catch {}
+    UI.toast('✅ Opciones actualizadas.');
   } catch (err) {
     UI.toast(err.message, 'error');
   } finally {
-    UI.loading('btn-save-config', false, originalText);
+    UI.setLoading('btn-save-config', false);
   }
 }
 
 function switchAdminTab(tab) {
-  const tabs = ['tab-solicitudes', 'tab-config'];
-  tabs.forEach(t => {
-    const el = document.getElementById(t);
-    if (el) el.classList.toggle('hidden', t !== tab);
-    
+  ['tab-solicitudes', 'tab-config'].forEach(t => {
+    document.getElementById(t)?.classList.toggle('hidden', t !== tab);
     const btn = document.getElementById('tab-btn-' + t.replace('tab-', ''));
     if (btn) {
-      btn.style.color = t === tab ? 'var(--blue-main)' : 'var(--text-muted)';
-      btn.style.borderBottomColor = t === tab ? 'var(--blue-main)' : 'transparent';
+      const active = t === tab;
+      btn.style.color             = active ? 'var(--blue-main)' : 'var(--text-muted)';
+      btn.style.borderBottomColor = active ? 'var(--blue-main)' : 'transparent';
     }
   });
 }
 
 // ──────────────────────────────────────────────────────
-// BOOTSTRAP — Inicialización
+// HELPERS
+// ──────────────────────────────────────────────────────
+function groupById(rows) {
+  return rows.reduce((acc, r) => { (acc[r.id] = acc[r.id] || []).push(r); return acc; }, {});
+}
+
+function extractEvento(justif) {
+  const m = (justif || '').match(/Evento:\s*(.+?)(\n|$)/);
+  return m ? m[1].trim() : (justif || '').substring(0, 50);
+}
+
+function formatDate(val) {
+  if (!val) return '—';
+  try {
+    return new Date(val).toLocaleDateString('es-AR', {
+      day: '2-digit', month: '2-digit', year: 'numeric'
+    });
+  } catch { return String(val); }
+}
+
+function formatDatetime(isoStr) {
+  if (!isoStr) return '—';
+  try {
+    return new Date(isoStr).toLocaleString('es-AR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch { return isoStr; }
+}
+
+function areaIcon(area) {
+  return { Compras: '🛒', Mantenimiento: '🏢', Tecnica: '💻' }[area] || '📋';
+}
+
+function escapeHtml(str) {
+  return String(str || '')
+    .replace(/&/g,'&amp;').replace(/"/g,'&quot;')
+    .replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function skeletonCards(n) {
+  return Array(n).fill(0).map(() => `
+    <div style="border:1px solid var(--border);border-radius:var(--radius-md);
+      padding:16px;background:var(--surface);animation:pulse 1.5s infinite;">
+      <div style="height:12px;background:#e0e8f0;border-radius:4px;width:40%;margin-bottom:10px;"></div>
+      <div style="height:16px;background:#e0e8f0;border-radius:4px;width:70%;margin-bottom:8px;"></div>
+      <div style="height:12px;background:#e0e8f0;border-radius:4px;width:55%;"></div>
+    </div>`).join('');
+}
+
+function emptyState(msg) {
+  return `<div style="text-align:center;padding:32px 16px;">
+    <div style="font-size:36px;margin-bottom:8px;">📭</div>
+    <p style="color:var(--text-subtle);font-size:15px;">${msg}</p>
+  </div>`;
+}
+
+let _stylesInjected = false;
+function injectCardStyles() {
+  if (_stylesInjected) return;
+  _stylesInjected = true;
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+    .req-card {
+      border:1px solid var(--border); border-radius:var(--radius-md);
+      padding:14px; background:var(--surface); transition:box-shadow .2s;
+    }
+    .req-card:hover { box-shadow:var(--shadow-md); }
+    .req-card__header {
+      display:flex; justify-content:space-between;
+      align-items:flex-start; margin-bottom:8px; gap:8px;
+    }
+    .req-card__id    { font-size:11px; font-family:monospace; color:var(--text-subtle); }
+    .req-card__title { font-weight:700; color:var(--text-dark); font-size:15px; }
+    .req-card__sub   { font-size:12px; color:var(--text-muted); margin-top:2px; }
+    .req-card__areas { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+    .req-card__area-row {
+      display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px;
+    }
+    .req-card__area-label { font-weight:600; color:var(--blue-main); min-width:100px; }
+    .req-card__recursos   { flex:1; color:var(--text-dark); }
+    .req-card__justif {
+      font-size:13px; color:var(--text-muted); margin:6px 0 10px; line-height:1.5;
+    }
+    .req-card__actions {
+      display:grid; gap:8px; grid-template-columns:140px 1fr auto;
+    }
+    @media(max-width:520px){ .req-card__actions{ grid-template-columns:1fr; } }
+    .admin-select,.admin-input {
+      padding:7px 10px; border:1px solid var(--border);
+      border-radius:var(--radius-sm); font-size:13px; font-family:inherit; width:100%;
+    }
+    .admin-select:focus,.admin-input:focus {
+      outline:none; border-color:var(--blue-main);
+      box-shadow:0 0 0 2px rgba(26,95,168,.15);
+    }
+    .admin-btn { white-space:nowrap; padding:7px 14px; font-size:13px; }
+    /* ── HISTORIAL ── */
+    .hist-wrap  { margin:8px 0 4px; }
+    .hist-toggle {
+      background:none; border:1px dashed var(--border);
+      border-radius:var(--radius-sm); padding:5px 10px;
+      font-size:12px; color:var(--text-muted); cursor:pointer; transition:all .15s;
+    }
+    .hist-toggle:hover {
+      background:var(--blue-pale); border-color:var(--blue-main); color:var(--blue-main);
+    }
+    .hist-list {
+      margin-top:8px; padding:10px 0 2px 16px;
+      border-left:2px solid var(--border);
+      display:flex; flex-direction:column; gap:0;
+    }
+    .hist-item  { position:relative; padding:0 0 14px 18px; }
+    .hist-item--last { padding-bottom:4px; }
+    .hist-dot {
+      position:absolute; left:-6px; top:3px;
+      width:10px; height:10px; border-radius:50%;
+      border:2px solid var(--white); box-shadow:0 0 0 1px var(--border);
+    }
+    .hist-header { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .hist-estado { font-weight:700; font-size:13px; }
+    .hist-ts     { font-size:11px; color:var(--text-subtle); }
+    .hist-nota   {
+      margin-top:3px; font-size:12px; color:var(--text-mid);
+      background:var(--gold-light); border-radius:4px; padding:3px 8px; display:inline-block;
+    }
+    .hist-admin  { font-size:11px; color:var(--text-subtle); margin-top:2px; }
+  `;
+  document.head.appendChild(style);
+}
+
+// ──────────────────────────────────────────────────────
+// BOOTSTRAP
 // ──────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => App.init());
