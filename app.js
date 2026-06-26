@@ -167,28 +167,16 @@ function renderCheckboxes(config) {
 }
 
 // ──────────────────────────────────────────────────────
-// PRECARGA — dispara fetchFormConfig cuando el usuario
-// termina de escribir el email (campo pierde foco).
-// Para cuando el login termina, la config ya está en
-// cache y los checkboxes se pintan instantáneo.
+// PRECARGA — SOLO se dispara si ya hay sesión activa.
+// Sin sesión no hay token válido → el backend rechaza
+// getFormConfig y el error contamina _configPromise.
 // ──────────────────────────────────────────────────────
 function bindPrecarga() {
-  const emailInput = document.getElementById('login-email');
-  if (!emailInput) return;
-
-  // Al salir del campo email → precargar config en background
-  emailInput.addEventListener('blur', () => {
-    if (!_configCache && !_configPromise && Session.getToken()) return;
-    // Solo precargamos si hay algo escrito (no en foco vacío)
-    if (emailInput.value.trim().length < 3) return;
-    fetchFormConfig().catch(() => {}); // silencioso — no es crítico
-  });
-
-  // Al escribir la contraseña → segunda oportunidad de precarga
-  document.getElementById('login-password')
-    ?.addEventListener('focus', () => {
-      fetchFormConfig().catch(() => {});
-    });
+  // Solo precargamos si el usuario YA está logueado
+  // (ej: refresh de página con sesión activa)
+  if (Session.getToken()) {
+    fetchFormConfig().catch(() => {});
+  }
 }
 
 // ──────────────────────────────────────────────────────
@@ -255,46 +243,128 @@ function bindEvents() {
 }
 
 // ──────────────────────────────────────────────────────
-// LOGIN — con SHA-256 del lado del cliente
+// LOGIN HELPERS — overlay de carga y mensajes de error
+// ──────────────────────────────────────────────────────
+function showLoginError(msg) {
+  const el = document.getElementById('login-error');
+  if (!el) return;
+  if (!msg) {
+    el.style.display = 'none';
+    el.textContent   = '';
+    return;
+  }
+  el.textContent   = msg;
+  el.style.display = 'block';
+  // Scroll suave hacia el error
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function showLoginOverlay(on) {
+  // Bloquear el botón y mostrar spinner en el texto
+  const btn = document.getElementById('btn-login');
+  if (!btn) return;
+  if (on) {
+    btn.dataset.orig = btn.textContent;
+    btn.innerHTML = `
+      <span style="display:inline-flex;align-items:center;gap:8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2.5" style="animation:spin-login .7s linear infinite;">
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83
+            M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+        </svg>
+        Verificando...
+      </span>`;
+    btn.disabled = true;
+
+    // Estilo del spinner (se inyecta una sola vez)
+    if (!document.getElementById('spin-style')) {
+      const s = document.createElement('style');
+      s.id = 'spin-style';
+      s.textContent = '@keyframes spin-login { to { transform: rotate(360deg); } }';
+      document.head.appendChild(s);
+    }
+
+    // Overlay semitransparente sobre el formulario
+    let overlay = document.getElementById('login-overlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'login-overlay';
+      overlay.style.cssText = `
+        position:absolute; inset:0; background:rgba(255,255,255,.6);
+        display:flex; align-items:center; justify-content:center;
+        border-radius:inherit; z-index:10;
+      `;
+      const formEl = document.getElementById('form-login');
+      if (formEl) {
+        formEl.style.position = 'relative';
+        formEl.appendChild(overlay);
+      }
+    }
+    overlay.style.display = 'flex';
+
+  } else {
+    btn.innerHTML = btn.dataset.orig || 'Acceder';
+    btn.disabled  = false;
+    const overlay = document.getElementById('login-overlay');
+    if (overlay) overlay.style.display = 'none';
+  }
+}
+
+// ──────────────────────────────────────────────────────
+// LOGIN — SHA-256 client-side + overlay + diagnóstico
 // ──────────────────────────────────────────────────────
 async function handleLogin(e) {
   e.preventDefault();
-  UI.setLoading('btn-login', true, 'Verificando...');
-  UI.hide('login-error');
 
   const email = document.getElementById('login-email').value.trim().toLowerCase();
   const pass  = document.getElementById('login-password').value;
 
-  try {
-    if (!email || !pass) throw new Error('Completá los dos campos.');
+  // Limpiar error anterior
+  showLoginError('');
 
-    // Hash SHA-256 antes de enviar — la contraseña en texto plano
-    // nunca sale del browser
+  // Validación rápida client-side antes de tocar la red
+  if (!email) { showLoginError('Ingresá tu correo electrónico.'); return; }
+  if (!email.includes('@')) { showLoginError('El correo no parece válido.'); return; }
+  if (!pass)  { showLoginError('Ingresá tu contraseña.'); return; }
+
+  // Mostrar overlay de carga
+  showLoginOverlay(true);
+
+  try {
+    // SHA-256 de la contraseña — nunca sale en texto plano
     const passHash = await sha256(pass);
 
-    // Lanzar login y precarga de config en paralelo.
-    // Si la config ya está en cache, esta Promise resuelve instantáneo.
-    const [res] = await Promise.all([
-      API.login(email, passHash),
-      fetchFormConfig().catch(() => {}), // silencioso si falla
-    ]);
+    // Llamar al backend
+    let res;
+    try {
+      res = await API.login(email, passHash);
+    } catch (netErr) {
+      // Error de red / timeout / CORS
+      throw new Error(
+        'No se pudo conectar con el servidor. ' +
+        'Verificá tu conexión o intentá de nuevo en unos segundos.'
+      );
+    }
 
-    if (!res.success) throw new Error(res.message);
+    // Respuesta recibida pero con error de credenciales
+    if (!res.success) {
+      throw new Error(res.message || 'Credenciales incorrectas.');
+    }
 
+    // ✅ Login exitoso
     Session.save(res);
     App._applySession(res);
     e.target.reset();
-
-    // Config ya debería estar en cache → renderiza sin espera
     App.showView('form');
+
+    // Cargar config DESPUÉS del login (ahora sí tenemos token)
     App._loadConfig();
     UI.toast(`Bienvenido/a, ${email.split('@')[0]} 👋`);
 
   } catch (err) {
-    const el = document.getElementById('login-error');
-    if (el) { el.textContent = err.message; el.style.display = 'block'; }
+    showLoginError(err.message);
   } finally {
-    UI.setLoading('btn-login', false);
+    showLoginOverlay(false);
   }
 }
 
