@@ -585,3 +585,121 @@ body::before {
 .btn {
   touch-action: manipulation;
 }
+
+/* ============================================================
+   MANTENIMIENTO — Grillas de requerimientos
+   ============================================================ */
+
+#section-Mantenimiento {
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  background: var(--surface);
+  margin-top: 4px;
+}
+
+.manto-subsection {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.manto-subsection:first-of-type {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: none;
+}
+
+.manto-subsection__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-mid);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 10px;
+}
+
+/* Scroll horizontal en mobile */
+.manto-grid-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+
+.manto-grid {
+  width: 100%;
+  min-width: 480px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.manto-grid thead tr {
+  background: var(--blue-light);
+}
+
+.manto-grid th {
+  padding: 8px 10px;
+  text-align: center;
+  color: var(--blue-deep);
+  font-weight: 700;
+  font-size: 12px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.manto-grid th:first-child {
+  text-align: left;
+  min-width: 180px;
+}
+
+.manto-grid tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background var(--transition);
+}
+
+.manto-grid tbody tr:last-child {
+  border-bottom: none;
+}
+
+.manto-grid tbody tr:hover {
+  background: var(--blue-pale);
+}
+
+.manto-grid td {
+  padding: 10px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.manto-grid__label {
+  text-align: left !important;
+  color: var(--text-dark);
+  font-weight: 500;
+  padding-left: 12px !important;
+  line-height: 1.4;
+}
+
+.manto-grid input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--blue-main);
+}
+
+/* Columna "No aplica" resaltada levemente */
+.manto-grid td:last-child,
+.manto-grid th:last-child {
+  background: rgba(200, 151, 42, 0.05);
+}
+
+.manto-grid input[type="radio"]:checked {
+  accent-color: var(--blue-main);
+}
+
+/* Encomienda */
+.manto-subsection input[type="radio"] {
+  accent-color: var(--blue-main);
+  width: 16px;
+  height: 16px;
+}

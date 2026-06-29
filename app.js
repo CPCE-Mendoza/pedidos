@@ -388,11 +388,17 @@ async function handleSubmitRequest(e) {
   ].filter(Boolean).join(' | ');
 
   const requerimientos = {};
-  AREAS.forEach(area => {
+
+  // Compras y Tecnica: checkboxes simples (dinámicos desde config)
+  ['Compras', 'Tecnica'].forEach(area => {
     const checked = [...document.querySelectorAll(`input[name="${area}"]:checked`)]
       .map(cb => cb.value);
     if (checked.length) requerimientos[area] = checked;
   });
+
+  // Mantenimiento: formulario detallado con grillas y campos específicos
+  const mantoData = recolectarMantenimiento();
+  if (mantoData) requerimientos['Mantenimiento'] = mantoData;
 
   try {
     if (!evento)                             throw new Error('Ingresá el nombre del evento.');
@@ -406,6 +412,7 @@ async function handleSubmitRequest(e) {
 
     UI.toast(`✅ ${res.message}`);
     e.target.reset();
+    resetMantenimiento();
   } catch (err) {
     UI.fieldError('form-error', err.message);
   } finally {
@@ -445,7 +452,7 @@ async function loadMyRequests() {
               <div style="margin-bottom:8px;">
                 <div class="req-card__area-row">
                   <span class="req-card__area-label">${areaIcon(r.area)} ${r.area}</span>
-                  <span class="req-card__recursos">${escapeHtml(r.recurso)}</span>
+                  <span class="req-card__recursos">${escapeHtml(r.recurso).replace(/\n/g, ' · ')}</span>
                   ${UI.statusBadge(r.estado)}
                 </div>
                 ${renderHistorial(r.historial, r.id + '-' + r.area)}
@@ -543,8 +550,11 @@ function renderAdminCard(r) {
         <div style="flex-shrink:0;">${UI.statusBadge(r.estado)}</div>
       </div>
       <div class="req-card__justif">
-        <strong>Recursos:</strong> ${escapeHtml(r.recurso)}<br>
-        ${escapeHtml(r.justificacion).replace(/\n/g, ' · ')}
+        <strong>Recursos:</strong><br>
+        ${escapeHtml(r.recurso).replace(/\n/g, '<br>')}
+        <div style="margin-top:4px;color:var(--text-subtle);">
+          ${escapeHtml(r.justificacion).replace(/\n/g, ' · ')}
+        </div>
       </div>
       ${renderHistorial(r.historial, r.id)}
       <div class="req-card__actions" style="margin-top:10px;">
@@ -794,6 +804,110 @@ function injectCardStyles() {
     .hist-admin  { font-size:11px; color:var(--text-subtle); margin-top:2px; }
   `;
   document.head.appendChild(style);
+}
+
+// Mostrar/ocultar input "Otro" en Instalaciones
+function toggleOtroInstalaciones(cb) {
+  const wrap = document.getElementById('inst_otro_input_wrap');
+  if (wrap) wrap.style.display = cb.checked ? 'block' : 'none';
+  if (!cb.checked) {
+    const txt = document.getElementById('inst_otro_text');
+    if (txt) txt.value = '';
+  }
+}
+
+// ──────────────────────────────────────────────────────
+// MANTENIMIENTO — Recolectar campos del formulario detallado
+// ──────────────────────────────────────────────────────
+function recolectarMantenimiento() {
+  // Grilla Seguridad
+  const segGuardias   = document.querySelector('input[name="seg_guardias"]:checked')?.value   || 'No aplica';
+  const segAcceso     = document.querySelector('input[name="seg_acceso"]:checked')?.value     || 'No aplica';
+  const segAmbulancia = document.querySelector('input[name="seg_ambulancia"]:checked')?.value || 'No aplica';
+
+  // Grilla Limpieza
+  const limpDurante  = document.querySelector('input[name="limp_durante"]:checked')?.value  || 'No aplica';
+  const limpPost     = document.querySelector('input[name="limp_post"]:checked')?.value     || 'No aplica';
+  const limpResiduos = document.querySelector('input[name="limp_residuos"]:checked')?.value || 'No aplica';
+
+  // Instalaciones (checkboxes múltiples)
+  const instalaciones = [...document.querySelectorAll('input[name="instalaciones"]:checked')]
+    .map(cb => {
+      if (cb.value === 'otro') {
+        const txt = document.getElementById('inst_otro_text')?.value.trim();
+        return txt ? `Otro: ${txt}` : null;
+      }
+      return cb.value;
+    })
+    .filter(Boolean);
+
+  // Observaciones
+  const observaciones = document.getElementById('manto_observaciones')?.value.trim() || '';
+
+  // Encomienda
+  const encomienda = document.querySelector('input[name="encomienda"]:checked')?.value || 'No';
+
+  // Construir resumen legible para guardar en la hoja
+  const partes = [
+    `SEGURIDAD — Guardias: ${segGuardias} | Acceso/Acreditaciones: ${segAcceso} | Ambulancia: ${segAmbulancia}`,
+    `LIMPIEZA — Durante: ${limpDurante} | Post evento: ${limpPost} | Residuos especiales: ${limpResiduos}`,
+  ];
+
+  if (instalaciones.length) {
+    partes.push(`INSTALACIONES — ${instalaciones.join(', ')}`);
+  }
+
+  if (observaciones) {
+    partes.push(`OBSERVACIONES — ${observaciones}`);
+  }
+
+  partes.push(`ENCOMIENDA — ${encomienda}`);
+
+  // Si TODO está en "No aplica" y no hay nada seleccionado → no enviar
+  const todoNoAplica =
+    segGuardias   === 'No aplica' &&
+    segAcceso     === 'No aplica' &&
+    segAmbulancia === 'No aplica' &&
+    limpDurante   === 'No aplica' &&
+    limpPost      === 'No aplica' &&
+    limpResiduos  === 'No aplica' &&
+    instalaciones.length === 0   &&
+    !observaciones               &&
+    encomienda === 'No';
+
+  if (todoNoAplica) return null; // No incluir Mantenimiento si no pidió nada
+
+  return partes;
+}
+
+// ──────────────────────────────────────────────────────
+// MANTENIMIENTO — Reset completo del formulario
+// ──────────────────────────────────────────────────────
+function resetMantenimiento() {
+  // Radios de seguridad → No aplica
+  ['seg_guardias','seg_acceso','seg_ambulancia',
+   'limp_durante','limp_post','limp_residuos'].forEach(name => {
+    const noAplica = document.querySelector(`input[name="${name}"][value="No aplica"]`);
+    if (noAplica) noAplica.checked = true;
+  });
+
+  // Checkboxes instalaciones → desmarcados
+  document.querySelectorAll('input[name="instalaciones"]')
+    .forEach(cb => { cb.checked = false; });
+
+  // Ocultar input "Otro"
+  const otroWrap = document.getElementById('inst_otro_input_wrap');
+  if (otroWrap) otroWrap.style.display = 'none';
+  const otroText = document.getElementById('inst_otro_text');
+  if (otroText) otroText.value = '';
+
+  // Observaciones
+  const obs = document.getElementById('manto_observaciones');
+  if (obs) obs.value = '';
+
+  // Encomienda → No
+  const encNo = document.querySelector('input[name="encomienda"][value="No"]');
+  if (encNo) encNo.checked = true;
 }
 
 // ──────────────────────────────────────────────────────
