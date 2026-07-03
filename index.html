@@ -37,7 +37,6 @@
       <div id="view-login" class="screen">
         <div class="screen__header">
           <h1 class="screen__title">Inicia Sesión</h1>
-          <p class="screen__desc">Credenciales corporativas de tu organización</p>
         </div>
 
         <form id="form-login" class="form">
@@ -61,7 +60,7 @@
         </form>
 
         <div class="app-footer">
-          Uso restringido · Sistema interno corporativo
+          Uso restringido · Sistema interno
         </div>
       </div>
 
@@ -78,11 +77,11 @@
             <div class="field">
               <label class="field__label" for="evento">Nombre del evento <span class="field__required">*</span></label>
               <input id="evento" type="text" name="evento" required 
-                placeholder="Ej: Capacitación de Contabilidad 2024"
+                placeholder="Ej: Capacitación o evento"
                 class="field__input">
             </div>
 
-<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
               <div class="field">
                 <label class="field__label" for="fecha">Fecha <span class="field__required">*</span></label>
                 <input id="fecha" type="date" name="fecha" required class="field__input">
@@ -92,13 +91,20 @@
                 <label class="field__label" for="horario">Horario <span class="field__required">*</span></label>
                 <input id="horario" type="time" name="horario" required class="field__input">
               </div>
-              
+
               <div class="field">
                 <label class="field__label" for="asistentes">Personas <span class="field__required">*</span></label>
-                <input id="asistentes" type="number" name="asistentes" min="1" required class="field__input" placeholder="Ej: 30">
+                <input id="asistentes" type="number" name="asistentes" min="1" required
+                  class="field__input" placeholder="Ej: 30">
               </div>
             </div>
 
+            <div class="field">
+              <label class="field__label" for="comentarios">Comentarios adicionales (opcional)</label>
+              <textarea id="comentarios" name="comentarios"
+                placeholder="Cualquier aclaración o contexto extra sobre el evento..."
+                class="field__textarea" style="min-height:70px;"></textarea>
+            </div>
           </div>
 
           <!-- Sección: Requerimientos por Área -->
@@ -113,7 +119,14 @@
               <div id="area-Compras" class="checkbox-group">
                 <p style="color: var(--text-subtle); font-size: 13px; padding: 4px;">Cargando opciones...</p>
               </div>
+                            <!-- Observaciones -->
+              
+                <div class="manto-subsection__title">Observaciones y Detalles Adicionales</div>
+                <textarea id="manto_observaciones" placeholder="Escribí cualquier detalle o aclaración adicional..."
+                  class="field__textarea" style="margin-top:6px;min-height:80px;"></textarea>
+              
             </div>
+            
 
             <!-- Área: Mantenimiento — formulario detallado -->
             <div class="field" id="section-Mantenimiento">
@@ -277,6 +290,11 @@
               <div id="area-Tecnica" class="checkbox-group">
                 <p style="color: var(--text-subtle); font-size: 13px; padding: 4px;">Cargando opciones...</p>
               </div>
+                                 <!-- Observaciones -->
+              
+                <div class="manto-subsection__title">Observaciones y Detalles Adicionales</div>
+                <textarea id="manto_observaciones" placeholder="Escribí cualquier detalle o aclaración adicional..."
+                  class="field__textarea" style="margin-top:6px;min-height:80px;"></textarea>
             </div>
 
             <div id="form-error" class="alert alert--error" style="display:none;"></div>
@@ -376,7 +394,7 @@
 
     <!-- Footer -->
     <div class="app-footer" style="margin-top: 16px;">
-      © 2024 CPCE Mendoza · Sistema Interno
+      © 2026 CPCE Mendoza · Sistema Interno
     </div>
   </div>
 

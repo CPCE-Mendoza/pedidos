@@ -161,6 +161,12 @@ body::before {
 
 .screen.hidden { display: none; }
 
+/* Regla genérica: cualquier elemento con .hidden se oculta,
+   no solo los que también tienen .screen. Sin esto, los tabs
+   internos del panel admin (tab-solicitudes / tab-config)
+   quedaban ambos visibles a la vez. */
+.hidden { display: none !important; }
+
 .screen__header {
   margin-bottom: 28px;
 }
@@ -702,4 +708,11 @@ body::before {
   accent-color: var(--blue-main);
   width: 16px;
   height: 16px;
+}
+
+/* Grid de fecha/horario/personas — colapsa a 1 columna en mobile */
+@media (max-width: 560px) {
+  .form__section > div[style*="grid-template-columns: 1fr 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
 }

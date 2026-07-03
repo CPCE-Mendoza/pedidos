@@ -376,15 +376,17 @@ async function handleSubmitRequest(e) {
   UI.setLoading('btn-submit', true, 'Enviando...');
   UI.fieldError('form-error', '');
 
-  const evento     = document.getElementById('evento')?.value.trim()  || '';
-  const fecha      = document.getElementById('fecha')?.value           || '';
-  const horario    = document.getElementById('horario')?.value         || '';
-  const asistentes = document.getElementById('asistentes')?.value     || '';
+  const evento      = document.getElementById('evento')?.value.trim()      || '';
+  const fecha       = document.getElementById('fecha')?.value               || '';
+  const horario     = document.getElementById('horario')?.value             || '';
+  const asistentes  = document.getElementById('asistentes')?.value          || '';
+  const comentarios = document.getElementById('comentarios')?.value.trim() || '';
 
   const justificacion = [
-    fecha      ? `Fecha: ${fecha}`           : '',
-    horario    ? `Horario: ${horario}`       : '',
-    asistentes ? `Asistentes: ${asistentes}` : '',
+    fecha       ? `Fecha: ${fecha}`             : '',
+    horario     ? `Horario: ${horario}`         : '',
+    asistentes  ? `Asistentes: ${asistentes}`   : '',
+    comentarios ? `Comentarios: ${comentarios}` : '',
   ].filter(Boolean).join(' | ');
 
   const requerimientos = {};
