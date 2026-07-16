@@ -37,18 +37,48 @@
       <div id="view-login" class="screen">
         <div class="screen__header">
           <h1 class="screen__title">Inicia Sesión</h1>
+          <p class="screen__desc">Usá tu cuenta corporativa de CPCE Mendoza</p>
         </div>
 
+        <!-- ── Botón OAuth Google (método principal) ── -->
+        <div id="oauth-section">
+          <div id="google-btn-wrap" style="display:flex;justify-content:center;margin-bottom:16px;">
+            <!-- Google renderiza aquí su botón oficial -->
+            <div id="google-signin-btn"></div>
+          </div>
+
+          <div id="oauth-loading" style="display:none;text-align:center;padding:16px;">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--blue-main)"
+              stroke-width="2.5" style="animation:spin-login .7s linear infinite;display:inline-block;">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83
+                M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+            </svg>
+            <p style="margin-top:8px;font-size:13px;color:var(--text-muted);">Verificando con Google...</p>
+          </div>
+
+          <div id="oauth-error" class="alert alert--error" style="display:none;margin-bottom:12px;"></div>
+
+          <!-- Separador -->
+          <div style="display:flex;align-items:center;gap:10px;margin:16px 0;">
+            <div style="flex:1;height:1px;background:var(--border);"></div>
+            <span style="font-size:12px;color:var(--text-subtle);white-space:nowrap;">
+              o ingresá con contraseña
+            </span>
+            <div style="flex:1;height:1px;background:var(--border);"></div>
+          </div>
+        </div>
+
+        <!-- ── Formulario clásico (fallback) ── -->
         <form id="form-login" class="form">
           <div class="field">
             <label class="field__label" for="login-email">Correo electrónico</label>
-            <input id="login-email" type="email" name="email" required 
-              placeholder="tu@empresa.com" class="field__input">
+            <input id="login-email" type="email" name="email" required
+              placeholder="tu@cpcemza.org.ar" class="field__input">
           </div>
 
           <div class="field">
             <label class="field__label" for="login-password">Contraseña</label>
-            <input id="login-password" type="password" name="password" required 
+            <input id="login-password" type="password" name="password" required
               placeholder="••••••••" class="field__input">
           </div>
 
@@ -59,10 +89,13 @@
           </button>
         </form>
 
-        <div class="app-footer">
-          Uso restringido · Sistema interno
+        <div class="app-footer" style="margin-top:16px;">
+          Uso restringido · Solo cuentas @cpcemza.org.ar
         </div>
       </div>
+
+      <!-- Cargar Google Identity Services -->
+      <script src="https://accounts.google.com/gsi/client" async defer></script>
 
       <!-- Vista: Nueva Solicitud (Multi-área) -->
       <div id="view-form" class="screen hidden">
@@ -77,19 +110,29 @@
             <div class="field">
               <label class="field__label" for="evento">Nombre del evento <span class="field__required">*</span></label>
               <input id="evento" type="text" name="evento" required 
-                placeholder="Ej: Capacitación o evento"
+                placeholder="Ej: Capacitación de Contabilidad 2024"
                 class="field__input">
             </div>
 
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px;">
               <div class="field">
                 <label class="field__label" for="fecha">Fecha <span class="field__required">*</span></label>
                 <input id="fecha" type="date" name="fecha" required class="field__input">
               </div>
 
               <div class="field">
-                <label class="field__label" for="horario">Horario <span class="field__required">*</span></label>
-                <input id="horario" type="time" name="horario" required class="field__input">
+                <label class="field__label" for="horario">Inicio <span class="field__required">*</span></label>
+                <input id="horario" type="time" name="horario" required class="field__input"
+                  onchange="validarHorarios()">
+              </div>
+
+              <div class="field">
+                <label class="field__label" for="horario_fin">Fin <span class="field__required">*</span></label>
+                <input id="horario_fin" type="time" name="horario_fin" required class="field__input"
+                  onchange="validarHorarios()">
+                <span id="horario-error" style="display:none;font-size:11px;color:var(--error);margin-top:2px;">
+                  La hora de fin debe ser posterior al inicio.
+                </span>
               </div>
 
               <div class="field">
@@ -119,14 +162,7 @@
               <div id="area-Compras" class="checkbox-group">
                 <p style="color: var(--text-subtle); font-size: 13px; padding: 4px;">Cargando opciones...</p>
               </div>
-                            <!-- Observaciones -->
-              
-                <div class="manto-subsection__title">Observaciones y Detalles Adicionales</div>
-                <textarea id="manto_observaciones" placeholder="Escribí cualquier detalle o aclaración adicional..."
-                  class="field__textarea" style="margin-top:6px;min-height:80px;"></textarea>
-              
             </div>
-            
 
             <!-- Área: Mantenimiento — formulario detallado -->
             <div class="field" id="section-Mantenimiento">
@@ -282,19 +318,125 @@
 
             </div>
 
-            <!-- Área: IT -->
-            <div class="field">
-              <label class="field__label" style="text-transform: none; font-weight: 600; font-size: 14px; margin-top: 8px;">
-                💻 Tecnica
+            <!-- Área: Técnica — campos numéricos -->
+            <div class="field" id="section-Tecnica">
+              <label class="field__label" style="text-transform:none;font-weight:700;font-size:15px;margin-top:8px;color:var(--blue-deep);">
+                💻 Técnica
               </label>
-              <div id="area-Tecnica" class="checkbox-group">
-                <p style="color: var(--text-subtle); font-size: 13px; padding: 4px;">Cargando opciones...</p>
+
+              <div class="manto-subsection" style="border-top:none;padding-top:0;margin-top:8px;">
+                <div class="manto-subsection__title">Equipamiento requerido</div>
+                <p style="font-size:12px;color:var(--text-subtle);margin-bottom:10px;">
+                  Ingresá la cantidad de cada equipo. Dejá en 0 si no lo necesitás.
+                </p>
+
+                <div class="tecnica-grid">
+                  <div class="tecnica-item">
+                    <div class="tecnica-item__icon">🎤</div>
+                    <label class="tecnica-item__label" for="tec_microfono">Micrófono</label>
+                    <div class="tecnica-item__counter">
+                      <button type="button" class="counter-btn" onclick="counterChange('tec_microfono', -1)">−</button>
+                      <input type="number" id="tec_microfono" value="0" min="0" max="99"
+                        class="counter-input" onchange="clampCounter(this)">
+                      <button type="button" class="counter-btn" onclick="counterChange('tec_microfono', 1)">+</button>
+                    </div>
+                  </div>
+
+                  <div class="tecnica-item">
+                    <div class="tecnica-item__icon">💻</div>
+                    <label class="tecnica-item__label" for="tec_computadora">Computadora</label>
+                    <div class="tecnica-item__counter">
+                      <button type="button" class="counter-btn" onclick="counterChange('tec_computadora', -1)">−</button>
+                      <input type="number" id="tec_computadora" value="0" min="0" max="99"
+                        class="counter-input" onchange="clampCounter(this)">
+                      <button type="button" class="counter-btn" onclick="counterChange('tec_computadora', 1)">+</button>
+                    </div>
+                  </div>
+
+                  <div class="tecnica-item">
+                    <div class="tecnica-item__icon">📱</div>
+                    <label class="tecnica-item__label" for="tec_tablet">Tablet</label>
+                    <div class="tecnica-item__counter">
+                      <button type="button" class="counter-btn" onclick="counterChange('tec_tablet', -1)">−</button>
+                      <input type="number" id="tec_tablet" value="0" min="0" max="99"
+                        class="counter-input" onchange="clampCounter(this)">
+                      <button type="button" class="counter-btn" onclick="counterChange('tec_tablet', 1)">+</button>
+                    </div>
+                  </div>
+
+                  <div class="tecnica-item">
+                    <div class="tecnica-item__icon">📽️</div>
+                    <label class="tecnica-item__label" for="tec_proyector">Proyector</label>
+                    <div class="tecnica-item__counter">
+                      <button type="button" class="counter-btn" onclick="counterChange('tec_proyector', -1)">−</button>
+                      <input type="number" id="tec_proyector" value="0" min="0" max="99"
+                        class="counter-input" onchange="clampCounter(this)">
+                      <button type="button" class="counter-btn" onclick="counterChange('tec_proyector', 1)">+</button>
+                    </div>
+                  </div>
+
+                  <div class="tecnica-item">
+                    <div class="tecnica-item__icon">📺</div>
+                    <label class="tecnica-item__label" for="tec_pantalla">Pantalla/TV</label>
+                    <div class="tecnica-item__counter">
+                      <button type="button" class="counter-btn" onclick="counterChange('tec_pantalla', -1)">−</button>
+                      <input type="number" id="tec_pantalla" value="0" min="0" max="99"
+                        class="counter-input" onchange="clampCounter(this)">
+                      <button type="button" class="counter-btn" onclick="counterChange('tec_pantalla', 1)">+</button>
+                    </div>
+                  </div>
+
+                  <div class="tecnica-item">
+                    <div class="tecnica-item__icon">🔊</div>
+                    <label class="tecnica-item__label" for="tec_parlante">Parlante</label>
+                    <div class="tecnica-item__counter">
+                      <button type="button" class="counter-btn" onclick="counterChange('tec_parlante', -1)">−</button>
+                      <input type="number" id="tec_parlante" value="0" min="0" max="99"
+                        class="counter-input" onchange="clampCounter(this)">
+                      <button type="button" class="counter-btn" onclick="counterChange('tec_parlante', 1)">+</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Observaciones técnicas -->
+                <div style="margin-top:14px;">
+                  <label class="field__label" style="text-transform:none;font-size:12px;color:var(--text-muted);margin-bottom:4px;display:block;">
+                    Observaciones técnicas (opcional)
+                  </label>
+                  <textarea id="tec_observaciones" placeholder="Ej: Se necesita sonido para sala de 200 personas, transmisión en vivo..."
+                    class="field__textarea" style="min-height:60px;font-size:13px;"></textarea>
+                </div>
               </div>
-                                 <!-- Observaciones -->
-              
-                <div class="manto-subsection__title">Observaciones y Detalles Adicionales</div>
-                <textarea id="manto_observaciones" placeholder="Escribí cualquier detalle o aclaración adicional..."
-                  class="field__textarea" style="margin-top:6px;min-height:80px;"></textarea>
+            </div>
+
+            <!-- Subir diagrama/disposición del evento -->
+            <div class="field" style="margin-top:8px;">
+              <label class="field__label" style="text-transform:none;font-weight:700;font-size:15px;color:var(--blue-deep);">
+                🗺️ Diagrama / Disposición del Evento
+              </label>
+              <p style="font-size:12px;color:var(--text-subtle);margin:4px 0 10px;">
+                Opcional. Subí un PNG con el plano o disposición del salón para que cada área entienda la organización del espacio.
+              </p>
+
+              <div id="diagrama-dropzone" class="diagrama-dropzone"
+                onclick="document.getElementById('diagrama-file').click()"
+                ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dragDrop(event)">
+                <div id="diagrama-placeholder">
+                  <div style="font-size:28px;margin-bottom:8px;">🖼️</div>
+                  <p style="font-weight:600;color:var(--text-mid);">Hacé clic o arrastrá un PNG aquí</p>
+                  <p style="font-size:12px;color:var(--text-subtle);margin-top:4px;">PNG, JPG o PDF · Máx. 5 MB</p>
+                </div>
+                <div id="diagrama-preview" style="display:none;">
+                  <img id="diagrama-img" style="max-width:100%;max-height:200px;border-radius:6px;object-fit:contain;">
+                  <div style="margin-top:8px;display:flex;align-items:center;gap:8px;">
+                    <span id="diagrama-filename" style="font-size:12px;color:var(--text-muted);flex:1;"></span>
+                    <button type="button" onclick="removeDiagrama(event)"
+                      style="background:none;border:none;color:var(--error);cursor:pointer;font-size:18px;line-height:1;">✕</button>
+                  </div>
+                </div>
+              </div>
+              <input type="file" id="diagrama-file" accept="image/png,image/jpeg,application/pdf"
+                style="display:none;" onchange="handleDiagramaFile(this)">
             </div>
 
             <div id="form-error" class="alert alert--error" style="display:none;"></div>
@@ -341,7 +483,7 @@
 
         <!-- Tab: Solicitudes -->
         <div id="tab-solicitudes">
-          <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+          <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; align-items:center;">
             <input id="admin-search" type="text" placeholder="Buscar solicitante, ID o recurso..."
               style="flex: 1; min-width: 200px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 14;"
               oninput="filterAdminRequests()">
@@ -353,6 +495,11 @@
               <option>Completado</option>
               <option>Rechazado</option>
             </select>
+            <button id="btn-reporte" type="button" class="btn btn--secondary"
+              onclick="descargarReporteArea()"
+              style="white-space:nowrap; display:flex; align-items:center; gap:6px;">
+              📄 Descargar Reporte
+            </button>
           </div>
           <div id="admin-requests-list" style="display: flex; flex-direction: column; gap: 12px;">
             <p style="color: var(--text-subtle); text-align: center;">Cargando...</p>
@@ -394,7 +541,7 @@
 
     <!-- Footer -->
     <div class="app-footer" style="margin-top: 16px;">
-      © 2026 CPCE Mendoza · Sistema Interno
+      © 2024 CPCE Mendoza · Sistema Interno
     </div>
   </div>
 

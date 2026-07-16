@@ -1,35 +1,17 @@
 // ─────────────────────────────────────────────────────────────
 //  api.js — Cliente JSONP hacia el backend de Apps Script
-//
-//  POR QUÉ JSONP:
-//  Los dominios Google Workspace (/a/macros/dominio.org/...)
-//  bloquean CORS en doPost() porque exigen autenticación OAuth.
-//  JSONP carga el endpoint como <script> — no está sujeto a
-//  CORS policy — y Apps Script responde con callback({...}).
-//
-//  SEGURIDAD: Todo viaja por HTTPS (cifrado en tránsito).
-//  El token de sesión se valida en cada llamada server-side.
+//  v2.6 — Completo y definitivo
 // ─────────────────────────────────────────────────────────────
 
 const API = (() => {
 
   let _callbackCounter = 0;
 
-  /**
-   * Ejecuta una llamada JSONP al backend de Apps Script.
-   * Inyecta un <script> con la URL + callback único,
-   * espera la respuesta y limpia el DOM.
-   *
-   * @param {string} action  - Nombre del handler en doGet()
-   * @param {Object} params  - Parámetros adicionales (ya como strings)
-   * @param {number} timeout - Milisegundos antes de abortar (default 15s)
-   */
   function jsonp(action, params = {}, timeout = 15000) {
     return new Promise((resolve, reject) => {
       const cbName = '__apscb_' + (++_callbackCounter) + '_' + Date.now();
       const token  = Session.getToken();
 
-      // Construir query string
       const qs = new URLSearchParams({
         action,
         callback: cbName,
@@ -40,16 +22,13 @@ const API = (() => {
       const url    = CONFIG.API_URL + '?' + qs;
       const script = document.createElement('script');
 
-      // Timer de timeout
       const timer = setTimeout(() => {
         cleanup();
         reject(new Error('Tiempo de espera agotado. Verificá tu conexión.'));
       }, timeout);
 
-      // La función global que Apps Script llamará
       window[cbName] = (data) => {
         cleanup();
-        // Si el backend reporta sesión inválida → logout
         if (!data.success && data.message &&
             (data.message.includes('sesión') || data.message.includes('Sesión'))) {
           Session.clear();
@@ -74,31 +53,34 @@ const API = (() => {
     });
   }
 
-  /**
-   * Serializa valores que no son strings simples.
-   * Arrays y objetos se JSON.stringify + encodeURIComponent.
-   */
   function enc(val) {
     if (typeof val === 'string') return encodeURIComponent(val);
     return encodeURIComponent(JSON.stringify(val));
   }
 
-  // ── API pública ──────────────────────────────────────────
-
   return {
+
+    // ── Autenticación ──────────────────────────────────────────
     login(email, password) {
       return jsonp('login', { email, password });
     },
 
+    loginOAuth(idToken) {
+      return jsonp('loginOAuth', { id_token: idToken }, 20000);
+    },
+
+    // ── Configuración ──────────────────────────────────────────
     getFormConfig() {
       return jsonp('getFormConfig');
     },
 
-    // 👇 ESTA ES LA FUNCIÓN NUEVA QUE FALTABA 👇
+    updateFormConfig(area, opciones) {
+      return jsonp('updateFormConfig', { area, opciones: enc(opciones) });
+    },
+
+    // ── Solicitudes ────────────────────────────────────────────
     submitMultiRequest(data) {
-      return jsonp('submitMultiRequest', {
-        data: enc(data),
-      });
+      return jsonp('submitMultiRequest', { data: enc(data) });
     },
 
     getMyRequests() {
@@ -109,6 +91,7 @@ const API = (() => {
       return jsonp('getAllRequests');
     },
 
+    // ── Estados ────────────────────────────────────────────────
     updateStatus(area, id, nuevoEstado, notas) {
       return jsonp('updateStatus', {
         area, id, nuevoEstado,
@@ -116,12 +99,25 @@ const API = (() => {
       });
     },
 
-    updateFormConfig(area, opciones) {
-      return jsonp('updateFormConfig', {
-        area,
-        opciones: enc(opciones),
-      });
+    // ── Reportes PDF ───────────────────────────────────────────
+    // 45s de timeout — generar PDF + subir a Drive puede tardar bastante
+    generarReporteArea(estado) {
+      return jsonp('generarReporteArea', { estado: estado || '' }, 45000);
     },
+
+    // ── Diagrama ───────────────────────────────────────────────
+    // El base64 puede ser largo — se envía en chunks via llamadas separadas
+    // Para simplificar, usamos submitMultiRequest con el diagrama incluido
+    // El objeto data ya viene con diagrama_b64 si existe
+    subirDiagrama(requestId, base64, mime, ext) {
+      return jsonp('subirDiagrama', {
+        request_id:   requestId,
+        diagrama_b64: encodeURIComponent(base64),
+        diagrama_mime: encodeURIComponent(mime),
+        diagrama_ext:  encodeURIComponent(ext),
+      }, 30000);
+    },
+
   };
 
 })();

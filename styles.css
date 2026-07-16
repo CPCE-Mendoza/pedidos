@@ -716,3 +716,139 @@ body::before {
     grid-template-columns: 1fr !important;
   }
 }
+
+/* Grid de 4 columnas (fecha/inicio/fin/personas) — colapsa en mobile */
+@media (max-width: 600px) {
+  .form__section > div[style*="grid-template-columns: 1fr 1fr 1fr 1fr"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+}
+@media (max-width: 380px) {
+  .form__section > div[style*="grid-template-columns: 1fr 1fr 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ============================================================
+   TÉCNICA — Grid de equipamiento con contadores
+   ============================================================ */
+
+#section-Tecnica {
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  background: var(--surface);
+  margin-top: 4px;
+}
+
+.tecnica-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+@media (max-width: 480px) {
+  .tecnica-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 320px) {
+  .tecnica-grid { grid-template-columns: 1fr; }
+}
+
+.tecnica-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px 8px;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.tecnica-item:has(.counter-input:not([value="0"])) {
+  border-color: var(--blue-main);
+  box-shadow: 0 0 0 2px rgba(26,95,168,.1);
+}
+
+.tecnica-item__icon  { font-size: 24px; line-height: 1; }
+.tecnica-item__label {
+  font-size: 12px; font-weight: 600;
+  color: var(--text-mid); text-align: center;
+  cursor: default;
+}
+
+.tecnica-item__counter {
+  display: flex; align-items: center; gap: 4px;
+  margin-top: 2px;
+}
+
+.counter-btn {
+  width: 28px; height: 28px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 16px; font-weight: 700;
+  color: var(--blue-main);
+  cursor: pointer; line-height: 1;
+  transition: all var(--transition);
+  display: flex; align-items: center; justify-content: center;
+}
+
+.counter-btn:hover {
+  background: var(--blue-light);
+  border-color: var(--blue-main);
+}
+
+.counter-btn:active { transform: scale(.92); }
+
+.counter-input {
+  width: 44px; height: 28px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  text-align: center;
+  font-size: 14px; font-weight: 700;
+  color: var(--text-dark);
+  background: var(--white);
+  -moz-appearance: textfield;
+}
+
+.counter-input::-webkit-inner-spin-button,
+.counter-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+
+.counter-input:focus {
+  outline: none;
+  border-color: var(--blue-main);
+  box-shadow: 0 0 0 2px rgba(26,95,168,.15);
+}
+
+/* ============================================================
+   DIAGRAMA — Dropzone de imagen
+   ============================================================ */
+
+.diagrama-dropzone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--transition);
+  background: var(--surface);
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.diagrama-dropzone:hover,
+.diagrama-dropzone.drag-over {
+  border-color: var(--blue-main);
+  background: var(--blue-pale);
+}
+
+.diagrama-dropzone.has-file {
+  border-style: solid;
+  border-color: var(--blue-main);
+  background: var(--white);
+  padding: 16px;
+}

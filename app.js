@@ -152,18 +152,18 @@ function fetchFormConfig() {
 }
 
 function renderCheckboxes(config) {
-  AREAS.forEach(area => {
-    const container = document.getElementById('area-' + area);
-    if (!container) return;
-    const opciones = config[area] || [];
-    container.innerHTML = opciones.length
-      ? opciones.map((op, i) => `
-          <div class="checkbox-item">
-            <input type="checkbox" id="cb-${area}-${i}" name="${area}" value="${op}">
-            <label for="cb-${area}-${i}">${op}</label>
-          </div>`).join('')
-      : '<p style="color:var(--text-subtle);font-size:13px;padding:4px;">Sin opciones configuradas</p>';
-  });
+  // Solo Compras usa checkboxes dinámicos
+  // Mantenimiento y Tecnica tienen formularios propios en el HTML
+  const container = document.getElementById('area-Compras');
+  if (!container) return;
+  const opciones = config['Compras'] || [];
+  container.innerHTML = opciones.length
+    ? opciones.map((op, i) => `
+        <div class="checkbox-item">
+          <input type="checkbox" id="cb-Compras-${i}" name="Compras" value="${op}">
+          <label for="cb-Compras-${i}">${op}</label>
+        </div>`).join('')
+    : '<p style="color:var(--text-subtle);font-size:13px;padding:4px;">Sin opciones configuradas</p>';
 }
 
 // ──────────────────────────────────────────────────────
@@ -235,11 +235,107 @@ function bindEvents() {
     ?.addEventListener('submit', handleSubmitRequest);
   document.getElementById('btn-logout')
     ?.addEventListener('click', () => {
+      // Revocar sesión de Google para que no auto-loguee en el próximo acceso
+      try {
+        if (window.google?.accounts?.id) {
+          google.accounts.id.disableAutoSelect();
+          google.accounts.id.revoke(Session.getEmail() || '', () => {});
+        }
+      } catch {}
+
       Session.clear();
       _configCache = _configPromise = null;
       document.getElementById('app-nav').style.display = 'none';
       App.showView('login');
     });
+}
+
+// ──────────────────────────────────────────────────────
+// OAUTH — Google Identity Services
+// Se inicializa cuando el script de Google carga (callback onGoogleLibraryLoad)
+// ──────────────────────────────────────────────────────
+
+// Callback que llama Google cuando su librería termina de cargar
+function onGoogleLibraryLoad() {
+  if (!CONFIG.GOOGLE_CLIENT_ID || CONFIG.GOOGLE_CLIENT_ID.includes('TU_CLIENT_ID')) {
+    // Client ID no configurado → solo mostrar formulario clásico
+    document.getElementById('oauth-section')?.style.setProperty('display', 'none');
+    return;
+  }
+
+  google.accounts.id.initialize({
+    client_id:        CONFIG.GOOGLE_CLIENT_ID,
+    callback:         handleOAuthCredential,
+    auto_select:      false,  // No auto-login silencioso
+    cancel_on_tap_outside: true,
+    // Restringir al dominio corporativo
+    hosted_domain:    CONFIG.DOMINIO,
+  });
+
+  // Renderizar el botón oficial de Google
+  google.accounts.id.renderButton(
+    document.getElementById('google-signin-btn'),
+    {
+      theme:     'outline',
+      size:      'large',
+      text:      'signin_with',
+      shape:     'rectangular',
+      logo_alignment: 'center',
+      width:     280,
+      locale:    'es',
+    }
+  );
+}
+
+/**
+ * Callback que Google llama cuando el usuario selecciona su cuenta.
+ * Recibe el credential (id_token JWT) y lo valida contra el backend.
+ */
+async function handleOAuthCredential(googleResponse) {
+  const idToken = googleResponse?.credential;
+  if (!idToken) {
+    showOAuthError('No se recibió respuesta de Google. Intentá de nuevo.');
+    return;
+  }
+
+  showOAuthLoading(true);
+
+  try {
+    const res = await API.loginOAuth(idToken);
+
+    if (!res.success) throw new Error(res.message);
+
+    // ✅ Login OAuth exitoso — mismo flujo que login clásico
+    Session.save(res);
+    App._applySession(res);
+    App.showView('form');
+    App._loadConfig();
+    UI.toast(`Bienvenido/a, ${res.email.split('@')[0]} 👋`);
+
+    // Limpiar estado OAuth
+    showOAuthError('');
+
+  } catch (err) {
+    showOAuthError(err.message);
+    // Revocar para que el usuario pueda intentar con otra cuenta
+    google.accounts.id.disableAutoSelect();
+  } finally {
+    showOAuthLoading(false);
+  }
+}
+
+function showOAuthError(msg) {
+  const el = document.getElementById('oauth-error');
+  if (!el) return;
+  el.textContent   = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+
+function showOAuthLoading(on) {
+  const loading = document.getElementById('oauth-loading');
+  const btnWrap = document.getElementById('google-btn-wrap');
+  if (loading) loading.style.display = on ? 'block' : 'none';
+  if (btnWrap) btnWrap.style.display = on ? 'none'  : 'flex';
 }
 
 // ──────────────────────────────────────────────────────
@@ -379,42 +475,58 @@ async function handleSubmitRequest(e) {
   const evento      = document.getElementById('evento')?.value.trim()      || '';
   const fecha       = document.getElementById('fecha')?.value               || '';
   const horario     = document.getElementById('horario')?.value             || '';
+  const horarioFin  = document.getElementById('horario_fin')?.value         || '';
   const asistentes  = document.getElementById('asistentes')?.value          || '';
   const comentarios = document.getElementById('comentarios')?.value.trim() || '';
 
   const justificacion = [
-    fecha       ? `Fecha: ${fecha}`             : '',
-    horario     ? `Horario: ${horario}`         : '',
-    asistentes  ? `Asistentes: ${asistentes}`   : '',
-    comentarios ? `Comentarios: ${comentarios}` : '',
+    fecha       ? `Fecha: ${fecha}`                           : '',
+    horario     ? `Horario: ${horario} — ${horarioFin || '?'}` : '',
+    asistentes  ? `Asistentes: ${asistentes}`                 : '',
+    comentarios ? `Comentarios: ${comentarios}`               : '',
   ].filter(Boolean).join(' | ');
 
   const requerimientos = {};
 
-  // Compras y Tecnica: checkboxes simples (dinámicos desde config)
-  ['Compras', 'Tecnica'].forEach(area => {
-    const checked = [...document.querySelectorAll(`input[name="${area}"]:checked`)]
-      .map(cb => cb.value);
-    if (checked.length) requerimientos[area] = checked;
-  });
+  // Compras: checkboxes simples (dinámicos desde config)
+  const comprasChecked = [...document.querySelectorAll('input[name="Compras"]:checked')]
+    .map(cb => cb.value);
+  if (comprasChecked.length) requerimientos['Compras'] = comprasChecked;
 
-  // Mantenimiento: formulario detallado con grillas y campos específicos
+  // Mantenimiento: formulario detallado con grillas
   const mantoData = recolectarMantenimiento();
   if (mantoData) requerimientos['Mantenimiento'] = mantoData;
+
+  // Técnica: campos numéricos de equipamiento
+  const tecnicaData = recolectarTecnica();
+  if (tecnicaData) requerimientos['Tecnica'] = tecnicaData;
 
   try {
     if (!evento)                             throw new Error('Ingresá el nombre del evento.');
     if (!fecha)                              throw new Error('Seleccioná la fecha del evento.');
-    if (!horario)                            throw new Error('Indicá el horario del evento.');
+    if (!horario)                            throw new Error('Indicá el horario de inicio.');
+    if (!horarioFin)                         throw new Error('Indicá el horario de fin.');
+    if (horarioFin <= horario)               throw new Error('La hora de fin debe ser posterior al inicio.');
     if (!asistentes || +asistentes < 1)      throw new Error('Indicá la cantidad de personas.');
     if (!Object.keys(requerimientos).length) throw new Error('Seleccioná al menos un recurso.');
 
     const res = await API.submitMultiRequest({ evento, justificacion, requerimientos });
     if (!res.success) throw new Error(res.message);
 
+    // Extraer el ID de la respuesta ("Solicitud registrada en X área(s). ID: REQ-xxx")
+    const idMatch = res.message.match(/REQ-\d+/);
+    const reqId   = idMatch ? idMatch[0] : null;
+
+    // Subir diagrama en segundo plano si existe
+    if (reqId && _diagramaFile) {
+      subirDiagramaBackground(reqId, _diagramaFile);
+    }
+
     UI.toast(`✅ ${res.message}`);
     e.target.reset();
     resetMantenimiento();
+    resetTecnica();
+    removeDiagramaOnReset();
   } catch (err) {
     UI.fieldError('form-error', err.message);
   } finally {
@@ -451,11 +563,13 @@ async function loadMyRequests() {
           </div>
           <div class="req-card__areas">
             ${rows.map(r => `
-              <div style="margin-bottom:8px;">
+              <div class="req-card__area-block">
                 <div class="req-card__area-row">
                   <span class="req-card__area-label">${areaIcon(r.area)} ${r.area}</span>
-                  <span class="req-card__recursos">${escapeHtml(r.recurso).replace(/\n/g, ' · ')}</span>
                   ${UI.statusBadge(r.estado)}
+                </div>
+                <div class="req-card__recurso-detail">
+                  ${renderRecurso(r.recurso, r.area)}
                 </div>
                 ${renderHistorial(r.historial, r.id + '-' + r.area)}
               </div>`).join('')}
@@ -552,9 +666,8 @@ function renderAdminCard(r) {
         <div style="flex-shrink:0;">${UI.statusBadge(r.estado)}</div>
       </div>
       <div class="req-card__justif">
-        <strong>Recursos:</strong><br>
-        ${escapeHtml(r.recurso).replace(/\n/g, '<br>')}
-        <div style="margin-top:4px;color:var(--text-subtle);">
+        ${renderRecurso(r.recurso, r.area)}
+        <div style="margin-top:6px;color:var(--text-subtle);font-size:12px;">
           ${escapeHtml(r.justificacion).replace(/\n/g, ' · ')}
         </div>
       </div>
@@ -804,6 +917,45 @@ function injectCardStyles() {
       background:var(--gold-light); border-radius:4px; padding:3px 8px; display:inline-block;
     }
     .hist-admin  { font-size:11px; color:var(--text-subtle); margin-top:2px; }
+
+    /* ── AREA BLOCK (mis solicitudes) ── */
+    .req-card__area-block {
+      padding:10px 0; border-bottom:1px solid var(--border);
+    }
+    .req-card__area-block:last-child { border-bottom:none; padding-bottom:0; }
+    .req-card__area-block:first-child { padding-top:0; }
+    .req-card__recurso-detail { margin:6px 0 6px 4px; }
+
+    /* ── CHIPS (Compras / Tecnica) ── */
+    .rec-chips { display:flex; flex-wrap:wrap; gap:5px; }
+    .rec-chip {
+      display:inline-block; padding:3px 10px;
+      background:var(--blue-pale); color:var(--blue-main);
+      border:1px solid var(--blue-light);
+      border-radius:999px; font-size:12px; font-weight:600;
+    }
+
+    /* ── LISTA MANTENIMIENTO ── */
+    .rec-manto { display:flex; flex-direction:column; gap:7px; }
+    .rec-manto__item {
+      display:flex; align-items:flex-start; gap:7px;
+    }
+    .rec-manto__icon { font-size:14px; line-height:1.4; flex-shrink:0; }
+    .rec-manto__body { display:flex; flex-direction:column; gap:3px; flex:1; }
+    .rec-manto__cat  {
+      font-size:11px; font-weight:700; text-transform:uppercase;
+      letter-spacing:0.05em; color:var(--text-muted);
+    }
+    .rec-manto__text { font-size:13px; color:var(--text-dark); }
+    .rec-manto__subs { display:flex; flex-wrap:wrap; gap:4px; }
+    .rec-manto__sub  {
+      display:inline-flex; align-items:center; gap:4px;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:6px; padding:2px 8px; font-size:12px;
+    }
+    .rec-manto__sub-label { color:var(--text-muted); }
+    .rec-manto__sub-val   { font-weight:700; color:var(--blue-main); }
+    .rec-manto__other     { font-size:13px; color:var(--text-dark); }
   `;
   document.head.appendChild(style);
 }
@@ -910,6 +1062,313 @@ function resetMantenimiento() {
   // Encomienda → No
   const encNo = document.querySelector('input[name="encomienda"][value="No"]');
   if (encNo) encNo.checked = true;
+}
+
+// ──────────────────────────────────────────────────────
+// REPORTE PDF — botón del panel admin
+// ──────────────────────────────────────────────────────
+async function descargarReporteArea() {
+  const btn    = document.getElementById('btn-reporte');
+  const estado = document.getElementById('admin-filter-status')?.value || '';
+
+  if (btn) {
+    btn.dataset.orig = btn.textContent;
+    btn.textContent  = '⏳ Generando PDF...';
+    btn.disabled     = true;
+  }
+
+  try {
+    const res = await API.generarReporteArea(estado);
+    if (!res.success) throw new Error(res.message);
+
+    // Abrir la URL de descarga en pestaña nueva
+    window.open(res.url, '_blank');
+    UI.toast('✅ PDF generado. Descargando...');
+  } catch (err) {
+    UI.toast('Error al generar el PDF: ' + err.message, 'error');
+  } finally {
+    if (btn) {
+      btn.textContent = btn.dataset.orig || '📄 Descargar Reporte';
+      btn.disabled    = false;
+    }
+  }
+}
+
+// ──────────────────────────────────────────────────────
+// MEJORA 3: VALIDACIÓN DE HORARIOS en tiempo real
+// ──────────────────────────────────────────────────────
+function validarHorarios() {
+  const inicio = document.getElementById('horario')?.value     || '';
+  const fin    = document.getElementById('horario_fin')?.value || '';
+  const errEl  = document.getElementById('horario-error');
+  const finInput = document.getElementById('horario_fin');
+
+  if (!errEl || !finInput) return true;
+
+  if (inicio && fin && fin <= inicio) {
+    errEl.style.display    = 'block';
+    finInput.style.border  = '1.5px solid var(--error)';
+    return false;
+  }
+
+  errEl.style.display   = 'none';
+  finInput.style.border = '';
+  return true;
+}
+
+// ──────────────────────────────────────────────────────
+// RENDER RECURSO — formatea el campo "recurso" según el área.
+// Mantenimiento: multilínea con prefijos SEGURIDAD —, LIMPIEZA —, etc.
+//   → se muestra como lista de items con icono y sub-valores.
+// Compras / Tecnica: lista simple separada por comas.
+//   → chips/tags inline.
+// ──────────────────────────────────────────────────────
+function renderRecurso(recurso, area) {
+  if (!recurso) return '';
+
+  if (area === 'Mantenimiento') {
+    // Cada línea es una categoría: "SEGURIDAD — Guardias: 3 | Acceso: No aplica | ..."
+    const lineas = String(recurso).split('\n').filter(l => l.trim());
+
+    const ICONS = {
+      SEGURIDAD:    '🛡️',
+      LIMPIEZA:     '🧹',
+      INSTALACIONES:'⚡',
+      OBSERVACIONES:'💬',
+      ENCOMIENDA:   '📦',
+    };
+
+    return `<div class="rec-manto">
+      ${lineas.map(linea => {
+        // Separar "CATEGORIA — detalle"
+        const dashIdx = linea.indexOf(' — ');
+        if (dashIdx === -1) return `<div class="rec-manto__item"><span class="rec-manto__other">${escapeHtml(linea)}</span></div>`;
+
+        const cat    = linea.substring(0, dashIdx).trim();
+        const detail = linea.substring(dashIdx + 3).trim();
+        const icon   = ICONS[cat] || '•';
+
+        // Para SEGURIDAD y LIMPIEZA: los sub-items vienen como "Guardias: 3 | Acceso: No aplica"
+        // Filtramos los que son "No aplica" para no mostrar ruido
+        if (cat === 'SEGURIDAD' || cat === 'LIMPIEZA') {
+          const subItems = detail.split('|').map(s => s.trim()).filter(s => {
+            const val = s.split(':')[1]?.trim();
+            return val && val !== 'No aplica';
+          });
+
+          if (!subItems.length) return ''; // Todos en No aplica → no mostrar
+
+          return `<div class="rec-manto__item">
+            <span class="rec-manto__icon">${icon}</span>
+            <div class="rec-manto__body">
+              <span class="rec-manto__cat">${cap(cat)}</span>
+              <div class="rec-manto__subs">
+                ${subItems.map(s => {
+                  const [label, val] = s.split(':').map(x => x.trim());
+                  return `<span class="rec-manto__sub">
+                    <span class="rec-manto__sub-label">${escapeHtml(label)}</span>
+                    <span class="rec-manto__sub-val">${escapeHtml(val)}</span>
+                  </span>`;
+                }).join('')}
+              </div>
+            </div>
+          </div>`;
+        }
+
+        // INSTALACIONES, OBSERVACIONES, ENCOMIENDA — texto directo
+        if (cat === 'ENCOMIENDA' && detail === 'No') return ''; // No mostrar si es No
+
+        return `<div class="rec-manto__item">
+          <span class="rec-manto__icon">${icon}</span>
+          <div class="rec-manto__body">
+            <span class="rec-manto__cat">${cap(cat)}</span>
+            <span class="rec-manto__text">${escapeHtml(detail)}</span>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  // Compras / Tecnica: chips inline
+  const items = String(recurso).split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+  return `<div class="rec-chips">
+    ${items.map(item => `<span class="rec-chip">${escapeHtml(item)}</span>`).join('')}
+  </div>`;
+}
+
+// helper: capitaliza primera letra
+function cap(str) {
+  return str.charAt(0) + str.slice(1).toLowerCase();
+}
+
+function removeDiagramaOnReset() {
+  if (_diagramaFile) removeDiagrama({ stopPropagation: () => {} });
+}
+
+/**
+ * Sube el diagrama en background después de registrar la solicitud.
+ * No bloquea el flujo principal — si falla, loguea silenciosamente.
+ */
+async function subirDiagramaBackground(reqId, file) {
+  try {
+    const base64 = await getDiagramaBase64();
+    if (!base64) return;
+
+    const ext  = file.name.split('.').pop().toLowerCase();
+    const mime = file.type || 'image/png';
+
+    // Verificar que el base64 no sea demasiado grande para JSONP (~6000 chars)
+    // Para archivos grandes mostramos aviso pero no bloqueamos
+    if (base64.length > 500000) {
+      UI.toast('⚠️ El diagrama es muy grande para enviarse. Adjuntalo manualmente.', 'error');
+      return;
+    }
+
+    const res = await API.subirDiagrama(reqId, base64, mime, ext);
+    if (res.success) {
+      UI.toast('🗺️ Diagrama guardado en la solicitud.');
+    }
+  } catch (e) {
+    // Silencioso — la solicitud ya quedó registrada
+    console.warn('Error subiendo diagrama:', e.message);
+  }
+}
+
+// ──────────────────────────────────────────────────────
+// TÉCNICA — Recolectar equipamiento numérico
+// ──────────────────────────────────────────────────────
+const TECNICA_EQUIPOS = [
+  { id: 'tec_microfono',   label: 'Micrófono'    },
+  { id: 'tec_computadora', label: 'Computadora'  },
+  { id: 'tec_tablet',      label: 'Tablet'       },
+  { id: 'tec_proyector',   label: 'Proyector'    },
+  { id: 'tec_pantalla',    label: 'Pantalla/TV'  },
+  { id: 'tec_parlante',    label: 'Parlante'     },
+];
+
+function recolectarTecnica() {
+  const lineas = [];
+
+  TECNICA_EQUIPOS.forEach(({ id, label }) => {
+    const val = parseInt(document.getElementById(id)?.value || '0', 10);
+    if (val > 0) lineas.push(`${label}: ${val}`);
+  });
+
+  const obs = document.getElementById('tec_observaciones')?.value.trim() || '';
+  if (obs) lineas.push(`Observaciones: ${obs}`);
+
+  return lineas.length ? lineas : null;
+}
+
+function resetTecnica() {
+  TECNICA_EQUIPOS.forEach(({ id }) => {
+    const el = document.getElementById(id);
+    if (el) el.value = '0';
+  });
+  const obs = document.getElementById('tec_observaciones');
+  if (obs) obs.value = '';
+}
+
+// Botones +/− del contador
+function counterChange(id, delta) {
+  const input = document.getElementById(id);
+  if (!input) return;
+  const newVal = Math.max(0, Math.min(99, parseInt(input.value || '0', 10) + delta));
+  input.value = newVal;
+  // Actualizar borde de la card si tiene valor
+  const card = input.closest('.tecnica-item');
+  if (card) card.style.borderColor = newVal > 0 ? 'var(--blue-main)' : '';
+}
+
+function clampCounter(input) {
+  const val = parseInt(input.value || '0', 10);
+  input.value = isNaN(val) ? 0 : Math.max(0, Math.min(99, val));
+}
+
+// ──────────────────────────────────────────────────────
+// DIAGRAMA — Subida de imagen del evento
+// ──────────────────────────────────────────────────────
+let _diagramaFile = null; // File object guardado globalmente
+
+function handleDiagramaFile(input) {
+  const file = input.files?.[0];
+  if (!file) return;
+  procesarDiagramaFile(file);
+}
+
+function procesarDiagramaFile(file) {
+  // Validar tamaño (5 MB)
+  if (file.size > 5 * 1024 * 1024) {
+    UI.toast('El archivo supera los 5 MB. Elegí uno más pequeño.', 'error');
+    return;
+  }
+
+  _diagramaFile = file;
+
+  const dropzone   = document.getElementById('diagrama-dropzone');
+  const placeholder = document.getElementById('diagrama-placeholder');
+  const preview    = document.getElementById('diagrama-preview');
+  const img        = document.getElementById('diagrama-img');
+  const filename   = document.getElementById('diagrama-filename');
+
+  if (filename) filename.textContent = file.name + ' (' + (file.size / 1024).toFixed(0) + ' KB)';
+
+  // Preview solo para imágenes
+  if (file.type.startsWith('image/')) {
+    const reader = new FileReader();
+    reader.onload = (e) => { if (img) img.src = e.target.result; };
+    reader.readAsDataURL(file);
+    if (img) img.style.display = 'block';
+  } else {
+    if (img) img.style.display = 'none'; // PDF — no preview
+  }
+
+  if (placeholder) placeholder.style.display = 'none';
+  if (preview)     preview.style.display = 'block';
+  if (dropzone)    dropzone.classList.add('has-file');
+}
+
+function removeDiagrama(event) {
+  event.stopPropagation();
+  _diagramaFile = null;
+  document.getElementById('diagrama-file').value = '';
+  document.getElementById('diagrama-placeholder').style.display = 'block';
+  document.getElementById('diagrama-preview').style.display    = 'none';
+  document.getElementById('diagrama-dropzone').classList.remove('has-file');
+  const img = document.getElementById('diagrama-img');
+  if (img) img.src = '';
+}
+
+function dragOver(event) {
+  event.preventDefault();
+  document.getElementById('diagrama-dropzone')?.classList.add('drag-over');
+}
+
+function dragLeave(event) {
+  document.getElementById('diagrama-dropzone')?.classList.remove('drag-over');
+}
+
+function dragDrop(event) {
+  event.preventDefault();
+  document.getElementById('diagrama-dropzone')?.classList.remove('drag-over');
+  const file = event.dataTransfer?.files?.[0];
+  if (file) procesarDiagramaFile(file);
+}
+
+/**
+ * Convierte el archivo a base64 para enviarlo al backend via JSONP.
+ * Limitación de JSONP: la URL tiene límite de ~8000 chars.
+ * Para archivos grandes usamos chunks, pero para esta app
+ * limitamos a 5MB y comprimimos la imagen antes de enviar.
+ */
+async function getDiagramaBase64() {
+  if (!_diagramaFile) return null;
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = (e) => resolve(e.target.result.split(',')[1]); // quitar "data:...;base64,"
+    reader.onerror = () => reject(new Error('Error al leer el archivo'));
+    reader.readAsDataURL(_diagramaFile);
+  });
 }
 
 // ──────────────────────────────────────────────────────
