@@ -33,14 +33,14 @@
     <!-- ── Main Card ── -->
     <div class="card">
 
-      <!-- Vista: Login -->
+<!-- Vista: Login -->
       <div id="view-login" class="screen">
         <div class="screen__header">
           <h1 class="screen__title">Inicia Sesión</h1>
           <p class="screen__desc">Usá tu cuenta corporativa de CPCE Mendoza</p>
         </div>
 
-        <!-- ── Botón OAuth Google (método principal) ── -->
+        <!-- ── Botón OAuth Google (único método) ── -->
         <div id="oauth-section">
           <div id="google-btn-wrap" style="display:flex;justify-content:center;margin-bottom:16px;">
             <!-- Google renderiza aquí su botón oficial -->
@@ -57,13 +57,12 @@
           </div>
 
           <div id="oauth-error" class="alert alert--error" style="display:none;margin-bottom:12px;"></div>
-
-          
+        </div> <!-- ✅ ESTE DIV CERRABA oauth-section (Faltaba) -->
 
         <div class="app-footer" style="margin-top:16px;">
           Uso restringido · Solo cuentas @cpcemza.org.ar
         </div>
-      </div>
+      </div> <!-- ✅ ESTE DIV CIERRA LA VISTA LOGIN -->
 
       <!-- Cargar Google Identity Services -->
       <script src="https://accounts.google.com/gsi/client" async defer></script>
