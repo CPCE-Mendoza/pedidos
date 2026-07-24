@@ -9,7 +9,14 @@ const CONFIG = {
   API_URL: 'https://script.google.com/macros/s/AKfycbxK70KtWfeMmpGuxEpwdf_etzJzSMZX-io3L2VEMn5mCRHFtybsnucRasa4_EVHfd_a/exec',
 
   // Nombre que aparece en el header de la app
-  ORG_NAME: 'Mi Organización',
+  ORG_NAME: 'CPCE Mendoza',
+
+  // 👇 CONFIGURACIÓN DE GOOGLE OAUTH 👇
+  // Reemplazá el texto entre comillas con el ID de cliente real que te dio Google Cloud
+  GOOGLE_CLIENT_ID: '393097089260-i83spq9s90vecj3rqp031ogg3381h7mc.apps.googleusercontent.com', 
+  
+  // Dominio corporativo permitido (bloquea accesos externos)
+  DOMINIO: 'cpcemza.org.ar',
 
   // Colores de estado (para badges)
   STATUS_COLORS: {
