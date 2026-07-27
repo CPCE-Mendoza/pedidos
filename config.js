@@ -6,7 +6,7 @@
 const CONFIG = {
   // URL generada al publicar la Web App en Apps Script.
   // Termina en /exec (no en /dev)
-  API_URL: 'https://script.google.com/macros/s/AKfycbzLl84Vb-SN79ZOYo0WeItbc3Wyzm59VIR6xdeRv491KfIFDJ4FU5CXFMjvuq743c8k/exec',
+  API_URL: 'https://script.google.com/macros/s/AKfycbyjVguSSX5tJJTR-Vvgl-uAWVCFuK4mbeR2w60xmSqcFm6jvFscUQWXDj26KIMzaIf6/exec',
 
   // Nombre que aparece en el header de la app
   ORG_NAME: 'CPCE Mendoza',
@@ -17,11 +17,14 @@ const CONFIG = {
   // Dominio corporativo permitido (bloquea accesos externos)
   DOMINIO: 'cpcemza.org.ar',
 
+  ANTICIPACION_DIAS: 7, // Días mínimos de anticipación para pedir un evento
+  DIAS_TOPE_INVITADOS: 2, // Días antes del evento para confirmar invitados
+
   // Colores de estado (para badges)
   STATUS_COLORS: {
-    'Pendiente':   'bg-amber-100 text-amber-800',
+'Pendiente':   'bg-amber-100 text-amber-800',
     'En proceso':  'bg-blue-100 text-blue-800',
-    'Completado':  'bg-green-100 text-green-800',
+    'Finalizado':  'bg-green-100 text-green-800', // Modificado a Finalizado
     'Rechazado':   'bg-red-100 text-red-800',
   },
 

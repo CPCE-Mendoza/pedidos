@@ -19,7 +19,7 @@ const AREAS = ['Compras', 'Mantenimiento', 'Tecnica'];
 const ESTADO_MAP = {
   Pendiente:    { bg: '#fff3cd', color: '#856404', icon: '🕐' },
   'En proceso': { bg: '#cfe2ff', color: '#084298', icon: '⚙️' },
-  Completado:   { bg: '#d1e7dd', color: '#0a3622', icon: '✅' },
+  Finalizado:   { bg: '#d1e7dd', color: '#0a3622', icon: '✅' }, 
   Rechazado:    { bg: '#f8d7da', color: '#58151c', icon: '❌' },
 };
 
@@ -190,6 +190,15 @@ const App = {
     const session = Session.get();
     if (session) {
       this._applySession(session);
+      
+      // 👇 NUEVO: Bloquear días previos en el calendario
+      const dateInput = document.getElementById('fecha');
+      if (dateInput) {
+        const minDate = new Date();
+        minDate.setDate(minDate.getDate() + (CONFIG.ANTICIPACION_DIAS || 7));
+        dateInput.min = minDate.toISOString().split('T')[0];
+      }
+
       // Mostrar formulario inmediatamente, pintar checkboxes en paralelo
       this.showView('form');
       this._loadConfig();
@@ -472,20 +481,24 @@ async function handleSubmitRequest(e) {
   UI.setLoading('btn-submit', true, 'Enviando...');
   UI.fieldError('form-error', '');
 
-  const evento      = document.getElementById('evento')?.value.trim()      || '';
+ const nombre      = document.getElementById('nombre')?.value.trim()       || '';
+  const apellido    = document.getElementById('apellido')?.value.trim()     || '';
+  const evento      = document.getElementById('evento')?.value.trim()       || '';
   const fecha       = document.getElementById('fecha')?.value               || '';
   const horario     = document.getElementById('horario')?.value             || '';
   const horarioFin  = document.getElementById('horario_fin')?.value         || '';
   const asistentes  = document.getElementById('asistentes')?.value          || '';
   const comentarios = document.getElementById('comentarios')?.value.trim() || '';
+const fechaTope   = document.getElementById('fecha-tope-hint')?.innerText || '';
 
   const justificacion = [
+    `Solicitante: ${nombre} ${apellido}`,
     fecha       ? `Fecha: ${fecha}`                           : '',
+    fechaTope, // ← Se guardará el aviso de fecha tope
     horario     ? `Horario: ${horario} — ${horarioFin || '?'}` : '',
     asistentes  ? `Asistentes: ${asistentes}`                 : '',
     comentarios ? `Comentarios: ${comentarios}`               : '',
   ].filter(Boolean).join(' | ');
-
   const requerimientos = {};
 
   // Compras: checkboxes simples (dinámicos desde config)
@@ -502,6 +515,8 @@ async function handleSubmitRequest(e) {
   if (tecnicaData) requerimientos['Tecnica'] = tecnicaData;
 
   try {
+    if (!nombre)                             throw new Error('Ingresá tu nombre.');
+    if (!apellido)                           throw new Error('Ingresá tu apellido.');
     if (!evento)                             throw new Error('Ingresá el nombre del evento.');
     if (!fecha)                              throw new Error('Seleccioná la fecha del evento.');
     if (!horario)                            throw new Error('Indicá el horario de inicio.');
@@ -510,7 +525,7 @@ async function handleSubmitRequest(e) {
     if (!asistentes || +asistentes < 1)      throw new Error('Indicá la cantidad de personas.');
     if (!Object.keys(requerimientos).length) throw new Error('Seleccioná al menos un recurso.');
 
-    const res = await API.submitMultiRequest({ evento, justificacion, requerimientos });
+    const res = await API.submitMultiRequest({ nombre_completo: `${nombre} ${apellido}`, evento, justificacion, requerimientos });
     if (!res.success) throw new Error(res.message);
 
     // Extraer el ID de la respuesta ("Solicitud registrada en X área(s). ID: REQ-xxx")
@@ -1121,6 +1136,19 @@ function validarHorarios() {
   errEl.style.display   = 'none';
   finInput.style.border = '';
   return true;
+}
+
+function calcularFechaTope() {
+  const inputFecha = document.getElementById('fecha').value;
+  const hint = document.getElementById('fecha-tope-hint');
+  if (!inputFecha) { hint.style.display = 'none'; return; }
+
+  const fechaObj = new Date(inputFecha + 'T12:00:00');
+  fechaObj.setDate(fechaObj.getDate() - (CONFIG.DIAS_TOPE_INVITADOS || 2));
+
+  const topeStr = fechaObj.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  hint.innerHTML = `⚠️ Lista definitiva de invitados tope:<br>${topeStr}`;
+  hint.style.display = 'block';
 }
 
 // ──────────────────────────────────────────────────────
