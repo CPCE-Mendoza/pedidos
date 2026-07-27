@@ -59,9 +59,7 @@
           <div id="oauth-error" class="alert alert--error" style="display:none;margin-bottom:12px;"></div>
         </div> <!-- ✅ ESTE DIV CERRABA oauth-section (Faltaba) -->
 
-        <div class="app-footer" style="margin-top:16px;">
-          Uso restringido · Solo cuentas @cpcemza.org.ar
-        </div>
+        
       </div> <!-- ✅ ESTE DIV CIERRA LA VISTA LOGIN -->
 
       <!-- Cargar Google Identity Services -->
@@ -491,7 +489,8 @@
       </div>
 
       <!-- Nav Footer (para usuarios autenticados) -->
-      <div id="app-nav" style="display: none; border-top: 1px solid var(--border); padding: 16px 36px; display: flex; gap: 8px; justify-content: space-between;">
+      <!-- Se quitó el "display: flex;" fijo. El archivo app.js lo agregará automáticamente al iniciar sesión -->
+      <div id="app-nav" style="display: none; border-top: 1px solid var(--border); padding: 16px 36px; gap: 8px; justify-content: space-between;">
         <button id="nav-form" type="button" class="btn btn--secondary" onclick="App.showView('form')" style="flex: 1;">
           📝 Nueva
         </button>

@@ -86,49 +86,49 @@
     gap: 0;
   }
 
-  /* ── Header institucional ── */
-  .app-header {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 0 4px 24px;
-    color: var(--white);
-  }
+/* ── Header institucional ── */
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 4px 24px;
+  color: var(--white);
+}
 
-  .header-logo {
-    font-size: 24px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-  }
+.header-logo {
+  height:60px; /* ⬅️ Esto controla el tamaño. Podés bajarlo a 32px o subirlo a 40px a tu gusto */
+  width: auto;  /* Mantiene la proporción original de la imagen */
+  object-fit: contain;
+}
 
-  .header-divider {
-    width: 1px;
-    height: 32px;
-    background: rgba(255,255,255,0.2);
-    flex-shrink: 0;
-  }
+.header-divider {
+  width: 1px;
+  height: 32px;
+  background: rgba(255,255,255,0.2);
+  flex-shrink: 0;
+}
 
-  .header-title {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
+.header-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 
-  .header-title__sup {
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: rgba(255,255,255,0.5);
-    line-height: 1;
-  }
+.header-title__sup {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.5);
+  line-height: 1;
+}
 
-  .header-title__main {
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--white);
-    line-height: 1.1;
-  }
+.header-title__main {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--white);
+  line-height: 1.1;
+}
 
   /* ── Tarjeta principal ── */
   .card {
