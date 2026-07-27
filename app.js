@@ -1081,9 +1081,15 @@ async function descargarReporteArea() {
     const res = await API.generarReporteArea(estado);
     if (!res.success) throw new Error(res.message);
 
-    // Abrir la URL de descarga en pestaña nueva
-    window.open(res.url, '_blank');
-    UI.toast('✅ PDF generado. Descargando...');
+    // NUEVO: El navegador arma y descarga el PDF directamente sin pasar por Google Drive
+    const link = document.createElement('a');
+    link.href = 'data:application/pdf;base64,' + res.base64;
+    link.download = res.nombre;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    UI.toast('✅ PDF descargado correctamente.');
   } catch (err) {
     UI.toast('Error al generar el PDF: ' + err.message, 'error');
   } finally {
@@ -1093,7 +1099,6 @@ async function descargarReporteArea() {
     }
   }
 }
-
 // ──────────────────────────────────────────────────────
 // MEJORA 3: VALIDACIÓN DE HORARIOS en tiempo real
 // ──────────────────────────────────────────────────────
