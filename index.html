@@ -513,7 +513,16 @@
       © 2026 CPCE Mendoza · Sistema Interno
     </div>
   </div>
-
+<!-- Modal Visor de Diagramas -->
+  <div id="visor-diagrama" style="display:none; position:fixed; inset:0; background:rgba(0,15,35,0.9); z-index:9999; justify-content:center; align-items:center; padding:20px; flex-direction:column; backdrop-filter: blur(4px);">
+    <button type="button" onclick="document.getElementById('visor-diagrama').style.display='none'; document.getElementById('visor-iframe').src='';" 
+      style="position:absolute; top:20px; right:20px; background:var(--error); color:white; border:none; width:40px; height:40px; border-radius:50%; font-size:20px; cursor:pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">✕</button>
+    
+    <!-- Aquí se inyecta la vista previa de Drive -->
+    <iframe id="visor-iframe" src="" style="width:100%; max-width:900px; height:75vh; border:none; border-radius:8px; background:white;"></iframe>
+    
+    <a id="visor-link" href="" target="_blank" style="margin-top:16px; color:#a0b8d0; font-size:14px; text-decoration:none;">Abrir en Google Drive ↗</a>
+  </div>
   <!-- Toast notifications -->
   <div id="toast" class="toast" style="display: none;"></div>
 

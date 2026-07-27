@@ -559,6 +559,7 @@ async function loadMyRequests() {
               <div class="req-card__id">${id}</div>
               <div class="req-card__title">${escapeHtml(first.evento || extractEvento(first.justificacion))}</div>
               <div class="req-card__sub">${formatDate(first.fecha)}</div>
+              ${first.diagrama ? `<div style="margin-top:8px;"><button type="button" class="btn btn--secondary" style="padding:4px 10px; font-size:11px;" onclick="abrirDiagrama('${first.diagrama}')">🗺️ Ver Diagrama</button></div>` : ''}
             </div>
           </div>
           <div class="req-card__areas">
@@ -670,6 +671,7 @@ function renderAdminCard(r) {
         <div style="margin-top:6px;color:var(--text-subtle);font-size:12px;">
           ${escapeHtml(r.justificacion).replace(/\n/g, ' · ')}
         </div>
+        ${r.diagrama ? `<div style="margin-top:10px;"><button type="button" class="btn btn--secondary" style="padding:6px 12px; font-size:12px;" onclick="abrirDiagrama('${r.diagrama}')">🗺️ Ver Diagrama</button></div>` : ''}
       </div>
       ${renderHistorial(r.historial, r.id)}
       <div class="req-card__actions" style="margin-top:10px;">
@@ -1380,3 +1382,18 @@ async function getDiagramaBase64() {
 // BOOTSTRAP
 // ──────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => App.init());
+
+// ── VISOR DE DIAGRAMAS ──
+function abrirDiagrama(driveUrl) {
+  if (!driveUrl) return;
+  const visor = document.getElementById('visor-diagrama');
+  const iframe = document.getElementById('visor-iframe');
+  const link = document.getElementById('visor-link');
+  
+  // Convertir URL "view" a "preview" para embeberla sin problemas en el sistema
+  const previewUrl = driveUrl.replace(/\/view.*$/, '/preview');
+  
+  iframe.src = previewUrl;
+  link.href = driveUrl;
+  visor.style.display = 'flex';
+}
