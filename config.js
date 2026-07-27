@@ -6,7 +6,7 @@
 const CONFIG = {
   // URL generada al publicar la Web App en Apps Script.
   // Termina en /exec (no en /dev)
-  API_URL: 'https://script.google.com/macros/s/AKfycbyjVguSSX5tJJTR-Vvgl-uAWVCFuK4mbeR2w60xmSqcFm6jvFscUQWXDj26KIMzaIf6/exec',
+  API_URL: 'https://script.google.com/macros/s/AKfycbz4IK6TkrI9CLogS_5VLIKNJBvszjA6QqjA1-c0U8l2COfmjwj-dCjq3Wsmnq4Uv5L5/exec',
 
   // Nombre que aparece en el header de la app
   ORG_NAME: 'CPCE Mendoza',

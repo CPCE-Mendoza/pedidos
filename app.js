@@ -481,24 +481,23 @@ async function handleSubmitRequest(e) {
   UI.setLoading('btn-submit', true, 'Enviando...');
   UI.fieldError('form-error', '');
 
- const nombre      = document.getElementById('nombre')?.value.trim()       || '';
-  const apellido    = document.getElementById('apellido')?.value.trim()     || '';
-  const evento      = document.getElementById('evento')?.value.trim()       || '';
+const evento      = document.getElementById('evento')?.value.trim()       || '';
   const fecha       = document.getElementById('fecha')?.value               || '';
   const horario     = document.getElementById('horario')?.value             || '';
   const horarioFin  = document.getElementById('horario_fin')?.value         || '';
   const asistentes  = document.getElementById('asistentes')?.value          || '';
   const comentarios = document.getElementById('comentarios')?.value.trim() || '';
-const fechaTope   = document.getElementById('fecha-tope-hint')?.innerText || '';
+
+  const fechaTope   = document.getElementById('fecha-tope-hint')?.innerText || '';
 
   const justificacion = [
-    `Solicitante: ${nombre} ${apellido}`,
     fecha       ? `Fecha: ${fecha}`                           : '',
-    fechaTope, // ← Se guardará el aviso de fecha tope
+    fechaTope,
     horario     ? `Horario: ${horario} — ${horarioFin || '?'}` : '',
     asistentes  ? `Asistentes: ${asistentes}`                 : '',
     comentarios ? `Comentarios: ${comentarios}`               : '',
   ].filter(Boolean).join(' | ');
+
   const requerimientos = {};
 
   // Compras: checkboxes simples (dinámicos desde config)
@@ -515,8 +514,6 @@ const fechaTope   = document.getElementById('fecha-tope-hint')?.innerText || '';
   if (tecnicaData) requerimientos['Tecnica'] = tecnicaData;
 
   try {
-    if (!nombre)                             throw new Error('Ingresá tu nombre.');
-    if (!apellido)                           throw new Error('Ingresá tu apellido.');
     if (!evento)                             throw new Error('Ingresá el nombre del evento.');
     if (!fecha)                              throw new Error('Seleccioná la fecha del evento.');
     if (!horario)                            throw new Error('Indicá el horario de inicio.');
@@ -525,7 +522,7 @@ const fechaTope   = document.getElementById('fecha-tope-hint')?.innerText || '';
     if (!asistentes || +asistentes < 1)      throw new Error('Indicá la cantidad de personas.');
     if (!Object.keys(requerimientos).length) throw new Error('Seleccioná al menos un recurso.');
 
-    const res = await API.submitMultiRequest({ nombre_completo: `${nombre} ${apellido}`, evento, justificacion, requerimientos });
+    const res = await API.submitMultiRequest({ evento, justificacion, requerimientos });
     if (!res.success) throw new Error(res.message);
 
     // Extraer el ID de la respuesta ("Solicitud registrada en X área(s). ID: REQ-xxx")
