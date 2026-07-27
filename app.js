@@ -1224,10 +1224,9 @@ async function subirDiagramaBackground(reqId, file) {
     const ext  = file.name.split('.').pop().toLowerCase();
     const mime = file.type || 'image/png';
 
-    // Verificar que el base64 no sea demasiado grande para JSONP (~6000 chars)
-    // Para archivos grandes mostramos aviso pero no bloqueamos
-    if (base64.length > 500000) {
-      UI.toast('⚠️ El diagrama es muy grande para enviarse. Adjuntalo manualmente.', 'error');
+    // Nuevo límite real: ~7 millones de caracteres (aprox 5 MB en Base64)
+    if (base64.length > 7500000) {
+      UI.toast('⚠️ El diagrama es muy grande para enviarse. (Máx 5MB).', 'error');
       return;
     }
 

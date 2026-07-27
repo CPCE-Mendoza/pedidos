@@ -106,16 +106,23 @@ const API = (() => {
     },
 
     // ── Diagrama ───────────────────────────────────────────────
-    // El base64 puede ser largo — se envía en chunks via llamadas separadas
-    // Para simplificar, usamos submitMultiRequest con el diagrama incluido
-    // El objeto data ya viene con diagrama_b64 si existe
+    // Como las imágenes son muy pesadas para JSONP (GET), usamos fetch (POST).
     subirDiagrama(requestId, base64, mime, ext) {
-      return jsonp('subirDiagrama', {
-        request_id:   requestId,
-        diagrama_b64: encodeURIComponent(base64),
-        diagrama_mime: encodeURIComponent(mime),
-        diagrama_ext:  encodeURIComponent(ext),
-      }, 30000);
+      return fetch(CONFIG.API_URL, {
+        method: 'POST',
+        headers: {
+          // text/plain evita bloqueos CORS de preflight en Google Apps Script
+          'Content-Type': 'text/plain;charset=utf-8', 
+        },
+        body: JSON.stringify({
+          action: 'subirDiagrama',
+          token: Session.getToken(),
+          request_id: requestId,
+          diagrama_b64: encodeURIComponent(base64),
+          diagrama_mime: encodeURIComponent(mime),
+          diagrama_ext: encodeURIComponent(ext)
+        })
+      }).then(res => res.json());
     },
 
   };
