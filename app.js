@@ -688,7 +688,7 @@ function renderAdminCard(r) {
       ${renderHistorial(r.historial, r.id)}
       <div class="req-card__actions" style="margin-top:10px;">
         <select class="status-select admin-select">
-          ${['Pendiente','En proceso','Completado','Rechazado'].map(s =>
+          ${['Pendiente','En proceso','Finalizado','Rechazado'].map(s =>
             `<option ${s === r.estado ? 'selected' : ''}>${s}</option>`
           ).join('')}
         </select>

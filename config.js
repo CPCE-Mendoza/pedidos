@@ -6,7 +6,7 @@
 const CONFIG = {
   // URL generada al publicar la Web App en Apps Script.
   // Termina en /exec (no en /dev)
-  API_URL: 'https://script.google.com/macros/s/AKfycbz4IK6TkrI9CLogS_5VLIKNJBvszjA6QqjA1-c0U8l2COfmjwj-dCjq3Wsmnq4Uv5L5/exec',
+  API_URL: 'https://script.google.com/macros/s/AKfycbxgSosdX6ZuxYipIlDTCKSq5wqhkrsWxsFhdIBmAVTlHSY3GqQjireDjsUNUaX8Z-_l/exec',
 
   // Nombre que aparece en el header de la app
   ORG_NAME: 'CPCE Mendoza',
@@ -22,7 +22,7 @@ const CONFIG = {
 
   // Colores de estado (para badges)
   STATUS_COLORS: {
-'Pendiente':   'bg-amber-100 text-amber-800',
+    'Pendiente':   'bg-amber-100 text-amber-800',
     'En proceso':  'bg-blue-100 text-blue-800',
     'Finalizado':  'bg-green-100 text-green-800', // Modificado a Finalizado
     'Rechazado':   'bg-red-100 text-red-800',

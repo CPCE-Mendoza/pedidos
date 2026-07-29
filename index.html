@@ -33,7 +33,7 @@
     <!-- ── Main Card ── -->
     <div class="card">
 
-<!-- Vista: Login -->
+      <!-- Vista: Login -->
       <div id="view-login" class="screen">
         <div class="screen__header">
           <h1 class="screen__title">Inicia Sesión</h1>
@@ -57,10 +57,9 @@
           </div>
 
           <div id="oauth-error" class="alert alert--error" style="display:none;margin-bottom:12px;"></div>
-        </div> <!-- ✅ ESTE DIV CERRABA oauth-section (Faltaba) -->
+        </div>
 
-        
-      </div> <!-- ✅ ESTE DIV CIERRA LA VISTA LOGIN -->
+      </div> 
 
       <!-- Cargar Google Identity Services -->
       <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -74,7 +73,8 @@
 
         <form id="form-request" class="form">
           <!-- Sección: Detalles del evento -->
-          div class="form__section">
+          <!-- ✅ AQUÍ ESTABA EL ERROR: Faltaba el < antes de div -->
+          <div class="form__section">
             
             <div class="field">
               <label class="field__label" for="evento">Nombre del evento <span class="field__required">*</span></label>
@@ -85,7 +85,6 @@
 
             <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px;">
               <div class="field">
-                <!-- NUEVO: Validación de anticipación conectada al input -->
                 <label class="field__label" for="fecha">Fecha <span class="field__required">*</span></label>
                 <input id="fecha" type="date" name="fecha" required class="field__input" onchange="calcularFechaTope()">
                 <span id="fecha-tope-hint" style="font-size:11px;color:var(--blue-main);font-weight:600;margin-top:4px;display:none;"></span>
@@ -492,7 +491,6 @@
       </div>
 
       <!-- Nav Footer (para usuarios autenticados) -->
-      <!-- Se quitó el "display: flex;" fijo. El archivo app.js lo agregará automáticamente al iniciar sesión -->
       <div id="app-nav" style="display: none; border-top: 1px solid var(--border); padding: 16px 36px; gap: 8px; justify-content: space-between;">
         <button id="nav-form" type="button" class="btn btn--secondary" onclick="App.showView('form')" style="flex: 1;">
           📝 Nueva
@@ -516,7 +514,8 @@
       © 2026 CPCE Mendoza · Sistema Interno
     </div>
   </div>
-<!-- Modal Visor de Diagramas -->
+  
+  <!-- Modal Visor de Diagramas -->
   <div id="visor-diagrama" style="display:none; position:fixed; inset:0; background:rgba(0,15,35,0.9); z-index:9999; justify-content:center; align-items:center; padding:20px; flex-direction:column; backdrop-filter: blur(4px);">
     <button type="button" onclick="document.getElementById('visor-diagrama').style.display='none'; document.getElementById('visor-iframe').src='';" 
       style="position:absolute; top:20px; right:20px; background:var(--error); color:white; border:none; width:40px; height:40px; border-radius:50%; font-size:20px; cursor:pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.3);">✕</button>
@@ -526,6 +525,7 @@
     
     <a id="visor-link" href="" target="_blank" style="margin-top:16px; color:#a0b8d0; font-size:14px; text-decoration:none;">Abrir en Google Drive ↗</a>
   </div>
+  
   <!-- Toast notifications -->
   <div id="toast" class="toast" style="display: none;"></div>
 
