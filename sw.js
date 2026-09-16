@@ -1,5 +1,5 @@
-// Cambiamos a v2 para obligar a los celulares a actualizar
-const CACHE_NAME = 'cpce-solicitudes-v2';
+// Cambiamos a v3 para obligar a los celulares a descargar todo de nuevo
+const CACHE_NAME = 'cpce-solicitudes-v3';
 
 // 1. Instalar y forzar a tomar el control inmediatamente
 self.addEventListener('install', (e) => {
