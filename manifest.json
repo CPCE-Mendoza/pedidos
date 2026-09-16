@@ -1,0 +1,21 @@
+{
+  "name": "Portal Solicitudes CPCE",
+  "short_name": "Pedidos CPCE",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f7fafd",
+  "theme_color": "#0d3d6e",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "https://cpcemza.org.ar/img/logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://cpcemza.org.ar/img/logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

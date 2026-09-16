@@ -1405,7 +1405,21 @@ async function getDiagramaBase64() {
 // ──────────────────────────────────────────────────────
 // BOOTSTRAP
 // ──────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => App.init());
+// ──────────────────────────────────────────────────────
+// BOOTSTRAP Y PWA (Service Worker)
+// ──────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  App.init();
+
+  // Encender Service Worker para que Chrome permita instalar la app
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js')
+        .then(() => console.log('PWA Lista: Service Worker registrado.'))
+        .catch((err) => console.log('Error en Service Worker:', err));
+    });
+  }
+});
 
 // ── VISOR DE DIAGRAMAS ──
 function abrirDiagrama(driveUrl) {
